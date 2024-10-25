@@ -1,6 +1,8 @@
 # Code for Fens
 
-This code was inspired from the [FedNova code repository](https://github.com/JYWa/FedNova).
+![fens](https://github.com/user-attachments/assets/c2fa9b7c-1d74-4d55-96c1-9b85914a8f0e)
+
+This respository contains the code for our paper: "Revisiting Ensembling in One-Shot Federated Learning", NeurIPS 2024. This code was inspired from the [FedNova code repository](https://github.com/JYWa/FedNova).
 
 ## Installation
 
