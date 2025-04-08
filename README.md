@@ -6,13 +6,14 @@ This respository contains the code for our paper: **"Revisiting Ensembling in On
 
 ## Installation
 
-The code is tested on Python 3.9. The dependencies can be installed using the following command.
+The code is tested on Python 3.9.
+The dependencies can be installed using the following command.
 
 ```bash
-conda create -n fens python=3.9
+conda create -n fens python=3.9 -f environment.yml
 conda activate fens
-pip install -r requirements.txt
 ```
+
 ## Wandb
 
 This code repository uses [wandb](https://wandb.ai/) for logging. Please create an account on wandb and login using the following command.
@@ -69,6 +70,29 @@ fens/scripts/train_aggregator.sh
 ```
 
 The aggregator training runs parallely for all clients using pyTorch Distributed. This is very similar to the local training, except it uses a different `distoptim` optimizer. Checkout `fens/distoptim` for all available distributed optimisers which are FL algorithms. The execution produces the final global, log files and train and test csvs per client in `results/aggregator` directory.
+
+## Fens Flamby Setup
+
+> [!IMPORTANT]
+> you need to install FLamby from the source to reproduce these experiments. Fens relies on it to load the datasets, and they must be installed via FLamby. If don't install them this way, it will complain that the datasets are not available.
+
+FLamby does not pin the dependencies to specific versions.
+Create the fens environment and install the necessary dependencies from `environment.yml`.
+Then, to install FLamby, runs these commands:
+
+```sh
+git clone https://github.com/owkin/FLamby.git flamby-repo # there already exists a flamby dir
+cd flamby-repo
+pip install -e .[heart,isic2019] # list of the datasets you want to install
+```
+
+You still need to download the datasets via FLamby.
+Visit its repository to install them.
+- [Fed-heart instructions](https://github.com/owkin/FLamby/tree/edacf54d5211520583b0133d55ac39b6fda8324b/flamby/datasets/fed_heart_disease)
+- [Fed-ISIC link instructions](https://github.com/owkin/FLamby/tree/edacf54d5211520583b0133d55ac39b6fda8324b/flamby/datasets/fed_isic2019)
+
+Note that FLamby has a lot of dependencies we don't need to just download the datasets.
+We may want to grab only the code we need and add it to this repo instead.
 
 ## Fens FLamby experiments
 
