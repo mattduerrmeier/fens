@@ -1,20 +1,23 @@
 #!/bin/bash
 
-root_dir=<absolute_path_to_the_root_of_this_repository>
+# root_dir: <absolute_path_to_the_root_of_this_repository>
+# run from the root of this project and it will work
+root_dir=$PWD
 
-env_python=<point_to_your_conda_python_interpreter>
+# env_python: <point_to_your_conda_python_interpreter>
+env_python="$(which python)"
+
 gpu_idx=0
 dataset=FedISIC2019
 seeds=(91)
 
 for seed in "${seeds[@]}"; do
-
     save_dir=flamby/local_training/${dataset}_${seed}
     log_dir=$root_dir/results/$save_dir
-    mkdir -p $log_dir
+    mkdir -p "$log_dir"
 
     # count time for experiment in hh mm ss
-    start=`date +%s`
+    start=$(date +%s)
 
     $env_python $root_dir/flamby/main.py \
         --dataset $dataset \
@@ -29,9 +32,8 @@ for seed in "${seeds[@]}"; do
         --nn_epochs 200 \
         --epochs 1
 
-    end=`date +%s`
-    runtime=$((end-start))
+    end=$(date +%s)
+    runtime=$((end - start))
     # Print time in hh:mm:ss
-    echo "==> Time taken: $(($runtime / 3600 )):$((($runtime / 60) % 60)):$(( $runtime % 60 ))"
-
+    echo "==> Time taken: $(($runtime / 3600)):$((($runtime / 60) % 60)):$(($runtime % 60))"
 done

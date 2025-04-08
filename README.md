@@ -74,7 +74,7 @@ The aggregator training runs parallely for all clients using pyTorch Distributed
 ## Fens Flamby Setup
 
 > [!IMPORTANT]
-> you need to install FLamby from the source to reproduce these experiments. Fens relies on it to load the datasets, and they must be installed via FLamby. If don't install them this way, it will complain that the datasets are not available.
+> you need to install FLamby from the source to reproduce these experiments. Fens relies on it to load the datasets, and they must be installed via FLamby. If you don't install them this way, it will complain that the datasets are not available.
 
 FLamby does not pin the dependencies to specific versions.
 Create the fens environment and install the necessary dependencies from `environment.yml`.
