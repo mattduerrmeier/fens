@@ -3,6 +3,7 @@ import torch.distributed as dist
 from torch.optim.optimizer import Optimizer, required
 from comm_helpers import communicate
 
+
 class FedProx(Optimizer):
     r"""Implements FedAvg and FedProx. Local Solver has momentum (to keep
     it comparable to GeL).    
@@ -52,14 +53,25 @@ class FedProx(Optimizer):
         The Nesterov version is analogously modified.
     """
 
-    def __init__(self, params, ratio, gmf, lr=required, momentum=0, dampening=0,
-                 weight_decay=0, nesterov=False, variance=0, mu=0, slr=1.0,
-                 clients_per_round=-1, total_clients=-1):
-        
+    def __init__(
+        self,
+        params,
+        ratio,
+        gmf,
+        lr=required,
+        momentum=0,
+        dampening=0,
+        weight_decay=0,
+        nesterov=False,
+        variance=0,
+        mu=0,
+        slr=1.0,
+        clients_per_round=-1,
+        total_clients=-1,
+    ):
         self.ratio = ratio
         self.itr = 0
         self.mu = mu
-
 
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -69,8 +81,14 @@ class FedProx(Optimizer):
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
 
         # Doesn't use the slr: Retaining the original formulation
-        defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
-                        weight_decay=weight_decay, nesterov=nesterov, variance=variance)
+        defaults = dict(
+            lr=lr,
+            momentum=momentum,
+            dampening=dampening,
+            weight_decay=weight_decay,
+            nesterov=nesterov,
+            variance=variance,
+        )
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super(FedProx, self).__init__(params, defaults)
@@ -78,7 +96,7 @@ class FedProx(Optimizer):
     def __setstate__(self, state):
         super(FedProx, self).__setstate__(state)
         for group in self.param_groups:
-            group.setdefault('nesterov', False)
+            group.setdefault("nesterov", False)
 
     def step(self, closure=None):
         """Performs a single optimization step.
@@ -93,37 +111,43 @@ class FedProx(Optimizer):
             loss = closure()
 
         for group in self.param_groups:
-            momentum = group['momentum']
+            momentum = group["momentum"]
 
-            for p in group['params']:
+            for p in group["params"]:
                 if p.grad is None:
                     continue
                 d_p = p.grad.data
 
                 param_state = self.state[p]
-                if 'old_init' not in param_state:
-                    param_state['old_init'] = torch.clone(p.data).detach()
+                if "old_init" not in param_state:
+                    param_state["old_init"] = torch.clone(p.data).detach()
 
                 # apply proximal update
-                d_p.add_(self.mu, p.data - param_state['old_init']) # g^(t, k) += mu * (x^(t, k) - x^(t, 0))
+                d_p.add_(
+                    self.mu, p.data - param_state["old_init"]
+                )  # g^(t, k) += mu * (x^(t, k) - x^(t, 0))
 
                 if momentum >= 0:
-                    if 'momentum_buffer' not in param_state:
-                        param_state['momentum_buffer'] = torch.clone(d_p).detach()
-                        param_state['momentum_buffer'].mul_(-1.0) # m^(t,k) = - g^(t,k)
+                    if "momentum_buffer" not in param_state:
+                        param_state["momentum_buffer"] = torch.clone(d_p).detach()
+                        param_state["momentum_buffer"].mul_(-1.0)  # m^(t,k) = - g^(t,k)
                     else:
-                        param_state['momentum_buffer'].mul_(momentum).sub_(d_p) # m^(t,k) = beta1 * m^(t,k-1) - g^(t,k)
+                        param_state["momentum_buffer"].mul_(momentum).sub_(
+                            d_p
+                        )  # m^(t,k) = beta1 * m^(t,k-1) - g^(t,k)
 
-                p.data.add_(group['lr'], param_state['momentum_buffer']) # x^(t,k) = x^(t,k-1) + eta_l * m^(t,k)
+                p.data.add_(
+                    group["lr"], param_state["momentum_buffer"]
+                )  # x^(t,k) = x^(t,k-1) + eta_l * m^(t,k)
 
         return loss
 
     def average(self):
         param_list = []
         for group in self.param_groups:
-            for p in group['params']:
+            for p in group["params"]:
                 param_state = self.state[p]
-                if 'old_init' not in param_state:
+                if "old_init" not in param_state:
                     continue
                 with torch.no_grad():
                     p.data.mul_(self.ratio)
@@ -133,14 +157,14 @@ class FedProx(Optimizer):
         communicate(param_list, dist.all_reduce)
 
         for group in self.param_groups:
-            for p in group['params']:
+            for p in group["params"]:
                 param_state = self.state[p]
-                if 'old_init' not in param_state:
+                if "old_init" not in param_state:
                     continue
-                param_state['old_init'] = torch.clone(p.data).detach()
+                param_state["old_init"] = torch.clone(p.data).detach()
                 # Reinitialize momentum buffer
-                if 'momentum_buffer' in param_state:
-                    param_state['momentum_buffer'].zero_()
+                if "momentum_buffer" in param_state:
+                    param_state["momentum_buffer"].zero_()
 
     def set_ratio(self, ratio):
         self.ratio = ratio

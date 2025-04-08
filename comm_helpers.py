@@ -8,6 +8,7 @@ import torch
 import torch.distributed as dist
 import functools
 
+
 def flatten_tensors(tensors):
     """
     Reference: https://github.com/facebookresearch/stochastic_gradient_push
@@ -49,6 +50,7 @@ def unflatten_tensors(flat, tensors):
         outputs.append(flat.narrow(0, offset, numel).view_as(tensor))
         offset += numel
     return tuple(outputs)
+
 
 def communicate(tensors, communication_op):
     """

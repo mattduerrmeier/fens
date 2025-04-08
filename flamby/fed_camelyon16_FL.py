@@ -4,11 +4,11 @@ import json
 from flamby.utils import evaluate_model_on_tests
 import os
 
-config_file_path = './configs/config_camelyon16.json'
-with open(config_file_path, 'r') as f:
+config_file_path = "./configs/config_camelyon16.json"
+with open(config_file_path, "r") as f:
     config = json.load(f)
 
-result_dir = '../results/flamby/fed_camelyon16'
+result_dir = "../results/flamby/fed_camelyon16"
 # Create result directory if it does not exist
 if not os.path.exists(result_dir):
     os.makedirs(result_dir)
@@ -21,33 +21,33 @@ from flamby.datasets.fed_camelyon16 import (
     metric,
     NUM_CLIENTS,
     get_nb_max_rounds,
-    collate_fn
+    collate_fn,
 )
 from flamby.datasets.fed_camelyon16 import FedCamelyon16 as FedDataset
 
 
 # We loop on all the clients of the distributed dataset and instantiate associated data loaders
 train_dataloaders = [
-            torch.utils.data.DataLoader(
-                FedDataset(center = i, train = True, pooled = False),
-                batch_size = BATCH_SIZE,
-                shuffle = True,
-                num_workers = 4,
-                collate_fn = collate_fn
-            )
-            for i in range(NUM_CLIENTS)
-        ]
+    torch.utils.data.DataLoader(
+        FedDataset(center=i, train=True, pooled=False),
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+        collate_fn=collate_fn,
+    )
+    for i in range(NUM_CLIENTS)
+]
 
 # We only instantiate one test set in this particular case: the pooled one
 test_dataloaders = [
-            torch.utils.data.DataLoader(
-                FedDataset(train = False, pooled = True),
-                batch_size = BATCH_SIZE,
-                shuffle = False,
-                num_workers = 4,
-                collate_fn = collate_fn
-            )
-        ]
+    torch.utils.data.DataLoader(
+        FedDataset(train=False, pooled=True),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4,
+        collate_fn=collate_fn,
+    )
+]
 
 lossfunc = BaselineLoss()
 m = Baseline()
@@ -55,15 +55,15 @@ m = Baseline()
 # Federated Learning loop
 # 2nd line of code to change to switch to another strategy (feed the FL strategy the right HPs)
 args = {
-            "training_dataloaders": train_dataloaders,
-            "model": m,
-            "loss": lossfunc,
-            "optimizer_class": torch.optim.SGD,
-            "learning_rate": LR,
-            "num_updates": 100,
-            "nrounds": -1,
-            "seed":-1
-        }
+    "training_dataloaders": train_dataloaders,
+    "model": m,
+    "loss": lossfunc,
+    "optimizer_class": torch.optim.SGD,
+    "learning_rate": LR,
+    "num_updates": 100,
+    "nrounds": -1,
+    "seed": -1,
+}
 
 
 from flamby.strategies.fed_avg import FedAvg
@@ -76,42 +76,46 @@ base_rounds = get_nb_max_rounds(args["num_updates"])
 rounds = [base_rounds * factor for factor in [1, 2, 5, 10]]
 tuning_strategies = [FedAvg]
 seeds = list(range(42, 47))
-result_dict = {} 
+result_dict = {}
 
 for strat in tuning_strategies:
     for round in rounds:
         for seed in seeds:
-                torch.manual_seed(seed)
+            torch.manual_seed(seed)
 
-                print(f"Running {strat.__name__} with {round} rounds for seed {seed}")
+            print(f"Running {strat.__name__} with {round} rounds for seed {seed}")
 
-                args["seed"] = seed
-                args["nrounds"] = round
-                args["learning_rate"] = config["strategies"][strat.__name__]["learning_rate"]
-                args["model"] = Baseline()
+            args["seed"] = seed
+            args["nrounds"] = round
+            args["learning_rate"] = config["strategies"][strat.__name__][
+                "learning_rate"
+            ]
+            args["model"] = Baseline()
 
-                strat_specific_args = {
-                    arg: config["strategies"][strat.__name__][arg]
-                    for arg in config["strategies"][strat.__name__]
-                    if arg not in ["learning_rate", "optimizer_class"]
-                }
+            strat_specific_args = {
+                arg: config["strategies"][strat.__name__][arg]
+                for arg in config["strategies"][strat.__name__]
+                if arg not in ["learning_rate", "optimizer_class"]
+            }
 
-                # Scaffold does not take seed as an argument in FLamby code
-                if strat.__name__ == "Scaffold":
-                    del args["seed"]
+            # Scaffold does not take seed as an argument in FLamby code
+            if strat.__name__ == "Scaffold":
+                del args["seed"]
 
-                s = strat(**args, **strat_specific_args)
-                trained_model = s.run()[0]
+            s = strat(**args, **strat_specific_args)
+            trained_model = s.run()[0]
 
-                performance = evaluate_model_on_tests(trained_model, test_dataloaders, metric)
-                performance = performance['client_test_0']
+            performance = evaluate_model_on_tests(
+                trained_model, test_dataloaders, metric
+            )
+            performance = performance["client_test_0"]
 
-                if strat.__name__ not in result_dict:
-                    result_dict[strat.__name__] = [(round, performance)]
-                else:
-                    result_dict[strat.__name__].append((round, performance))
+            if strat.__name__ not in result_dict:
+                result_dict[strat.__name__] = [(round, performance)]
+            else:
+                result_dict[strat.__name__].append((round, performance))
 
-                print(f"Performance: {performance}")
+            print(f"Performance: {performance}")
 
 
 # Compute mean performance for each round
@@ -126,7 +130,7 @@ for strat in tuning_strategies:
     result_dict[strat.__name__] = list(zip(rounds, mean_perfs))
 
 # save result_dict as json
-with open(os.path.join(result_dir, 'fl_strategy_tuning.json'), 'w') as fp:
+with open(os.path.join(result_dir, "fl_strategy_tuning.json"), "w") as fp:
     json.dump(result_dict, fp)
 
 # Store acc,round for the round that gives best performance
@@ -141,7 +145,7 @@ performances = []
 for strat in strategies:
     for seed in seeds:
         torch.manual_seed(seed)
-        
+
         print(f"Running {strat.__name__} for {best_round} rounds and seed {seed}")
 
         args["seed"] = seed
@@ -162,7 +166,7 @@ for strat in strategies:
         trained_model = s.run()[0]
 
         performance = evaluate_model_on_tests(trained_model, test_dataloaders, metric)
-        performance = performance['client_test_0']
+        performance = performance["client_test_0"]
 
         performances.append([strat.__name__, seed, performance])
 
@@ -170,6 +174,6 @@ for strat in strategies:
 
 # Convert performances into a dataframe
 import pandas as pd
-df = pd.DataFrame(performances, columns=['strategy', 'seed', 'performance'])
-df.to_csv(os.path.join(result_dir, 'fl_strategy_best.csv'), index=False)
 
+df = pd.DataFrame(performances, columns=["strategy", "seed", "performance"])
+df.to_csv(os.path.join(result_dir, "fl_strategy_best.csv"), index=False)

@@ -5,13 +5,9 @@ class Dataset:
 
     """
 
-    def __init__(
-        self,
-        size: int,
-        args: dict
-    ):
-       self.size = size
-       self.args = args
+    def __init__(self, size: int, args: dict):
+        self.size = size
+        self.args = args
 
     def fetch(self, client_index):
         """
@@ -28,6 +24,7 @@ class Dataset:
 
         """
         raise NotImplementedError
+
 
 class Data:
     """

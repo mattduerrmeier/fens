@@ -3,12 +3,23 @@ import copy
 import torch
 import wandb
 
-def train_and_evaluate(id_str, model, criterion, optimizer, scheduler, 
-                        train_loader, test_loader, iterations, device, 
-                        metric, test_every=5, require_argmax=False):
 
-    wandb.define_metric(f'{id_str}/epoch')
-    wandb.define_metric(f'{id_str}/*', step_metric=f'{id_str}/epoch')
+def train_and_evaluate(
+    id_str,
+    model,
+    criterion,
+    optimizer,
+    scheduler,
+    train_loader,
+    test_loader,
+    iterations,
+    device,
+    metric,
+    test_every=5,
+    require_argmax=False,
+):
+    wandb.define_metric(f"{id_str}/epoch")
+    wandb.define_metric(f"{id_str}/*", step_metric=f"{id_str}/epoch")
 
     model.train()
     model = model.to(device)
@@ -22,7 +33,7 @@ def train_and_evaluate(id_str, model, criterion, optimizer, scheduler,
 
     y_preds = []
     y_trues = []
-    
+
     while epoch < iterations:
         epoch += 1
         for data, target in train_loader:
@@ -62,24 +73,43 @@ def train_and_evaluate(id_str, model, criterion, optimizer, scheduler,
         y_trues_np = torch.cat(y_trues).numpy()
         y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
 
-        acc = metric(y_trues_np, y_preds_np)    
-        
-        logging.info(f'Epoch {epoch} Train Loss {losses:.4f} Train Acc {acc:.4f}')
-        wandb.log({f'{id_str}/train_loss': losses, f'{id_str}/train_acc': acc, 
-                   f'{id_str}/epoch': epoch})
+        acc = metric(y_trues_np, y_preds_np)
+
+        logging.info(f"Epoch {epoch} Train Loss {losses:.4f} Train Acc {acc:.4f}")
+        wandb.log(
+            {
+                f"{id_str}/train_loss": losses,
+                f"{id_str}/train_acc": acc,
+                f"{id_str}/epoch": epoch,
+            }
+        )
 
         if epoch % test_every == 0:
-            test_loss, test_acc = evaluate(model, criterion, test_loader, device, 
-                                           metric, require_argmax=require_argmax)
+            test_loss, test_acc = evaluate(
+                model,
+                criterion,
+                test_loader,
+                device,
+                metric,
+                require_argmax=require_argmax,
+            )
             if test_acc > best_acc:
                 best_acc = test_acc
                 # store the best model by making a copy
                 best_model = copy.deepcopy(model)
-            logging.info(f'Epoch {epoch} Test Loss {test_loss:.4f} Test Acc {test_acc:.4f}')
-            wandb.log({f'{id_str}/test_loss': test_loss, f'{id_str}/test_acc': test_acc, 
-                       f'{id_str}/epoch': epoch})
+            logging.info(
+                f"Epoch {epoch} Test Loss {test_loss:.4f} Test Acc {test_acc:.4f}"
+            )
+            wandb.log(
+                {
+                    f"{id_str}/test_loss": test_loss,
+                    f"{id_str}/test_acc": test_acc,
+                    f"{id_str}/epoch": epoch,
+                }
+            )
 
     return best_acc, best_model
+
 
 def evaluate(model, criterion, test_loader, device, metric, require_argmax=True):
     model.eval()
@@ -95,7 +125,7 @@ def evaluate(model, criterion, test_loader, device, metric, require_argmax=True)
 
             data = data.to(device)
             target = target.to(device)
-            
+
             outputs = model(data)
             if not require_argmax:
                 target = target.reshape(outputs.shape)
@@ -103,14 +133,14 @@ def evaluate(model, criterion, test_loader, device, metric, require_argmax=True)
             loss = criterion(outputs, target)
             losses += loss.item() * data.size(0)
             counts += data.size(0)
-            
+
             if require_argmax:
                 y_preds.append(torch.argmax(outputs, dim=1).detach().cpu())
             else:
                 y_preds.append(outputs.detach().cpu())
 
     losses /= counts
-                    
+
     y_preds_np = torch.cat(y_preds).numpy()
     y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
 
@@ -118,5 +148,5 @@ def evaluate(model, criterion, test_loader, device, metric, require_argmax=True)
     y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
 
     acc = metric(y_trues_np, y_preds_np)
-    
+
     return losses, acc

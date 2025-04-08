@@ -7,7 +7,9 @@ import sys
 
 # get num_updates from command line
 if len(sys.argv) < 2:
-    print('Please provide number of updates a.k.a local steps and gpu device id. Exiting...')
+    print(
+        "Please provide number of updates a.k.a local steps and gpu device id. Exiting..."
+    )
     exit(0)
 num_updates = int(sys.argv[1])
 device_id = int(sys.argv[2])
@@ -15,11 +17,11 @@ device_id = int(sys.argv[2])
 # Set CUDA_VISIBLE_DEVICES to specify GPU
 os.environ["CUDA_VISIBLE_DEVICES"] = f"{device_id}"
 
-config_file_path = './configs/config_isic2019.json'
-with open(config_file_path, 'r') as f:
+config_file_path = "./configs/config_isic2019.json"
+with open(config_file_path, "r") as f:
     config = json.load(f)
 
-result_dir = '../results/flamby/fed_isic2019_os'
+result_dir = "../results/flamby/fed_isic2019_os"
 # Create result directory if it does not exist
 if not os.path.exists(result_dir):
     os.makedirs(result_dir)
@@ -30,31 +32,31 @@ from flamby.datasets.fed_isic2019 import (
     Baseline,
     BaselineLoss,
     metric,
-    NUM_CLIENTS
+    NUM_CLIENTS,
 )
 from flamby.datasets.fed_isic2019 import FedIsic2019 as FedDataset
 
 
 # We loop on all the clients of the distributed dataset and instantiate associated data loaders
 train_dataloaders = [
-            torch.utils.data.DataLoader(
-                FedDataset(center = i, train = True, pooled = False),
-                batch_size = BATCH_SIZE,
-                shuffle = True,
-                num_workers = 4
-            )
-            for i in range(NUM_CLIENTS)
-        ]
+    torch.utils.data.DataLoader(
+        FedDataset(center=i, train=True, pooled=False),
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,
+    )
+    for i in range(NUM_CLIENTS)
+]
 
 # We only instantiate one test set in this particular case: the pooled one
 test_dataloaders = [
-            torch.utils.data.DataLoader(
-                FedDataset(train = False, pooled = True),
-                batch_size = BATCH_SIZE,
-                shuffle = False,
-                num_workers = 4,
-            )
-        ]
+    torch.utils.data.DataLoader(
+        FedDataset(train=False, pooled=True),
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4,
+    )
+]
 
 lossfunc = BaselineLoss()
 m = Baseline()
@@ -62,21 +64,21 @@ m = Baseline()
 # Federated Learning loop
 # 2nd line of code to change to switch to another strategy (feed the FL strategy the right HPs)
 args = {
-            "training_dataloaders": train_dataloaders,
-            "model": m,
-            "loss": lossfunc,
-            "optimizer_class": torch.optim.SGD,
-            "learning_rate": LR,
-            "num_updates": -1,
-            "nrounds": 1,
-            "seed":-1
-        }
+    "training_dataloaders": train_dataloaders,
+    "model": m,
+    "loss": lossfunc,
+    "optimizer_class": torch.optim.SGD,
+    "learning_rate": LR,
+    "num_updates": -1,
+    "nrounds": 1,
+    "seed": -1,
+}
 
 
 from flamby.strategies.fed_avg import FedAvg
 from flamby.strategies.fed_opt import FedAdam
 from flamby.strategies.fed_opt import FedYogi
-from flamby.strategies.scaffold import Scaffold # one-shot scaffold is same as FedAvg
+from flamby.strategies.scaffold import Scaffold  # one-shot scaffold is same as FedAvg
 from flamby.strategies.fed_prox import FedProx
 
 seeds = list(range(42, 45))
@@ -86,7 +88,9 @@ performances = []
 # Run strategies with best round on remaining seeds
 for strat in strategies:
     for seed in seeds:
-        print(f"Running {strat.__name__} for 1 round, {num_updates} local steps and seed {seed}")
+        print(
+            f"Running {strat.__name__} for 1 round, {num_updates} local steps and seed {seed}"
+        )
 
         args["seed"] = seed
         args["num_updates"] = num_updates
@@ -106,7 +110,7 @@ for strat in strategies:
         trained_model = s.run()[0]
 
         performance = evaluate_model_on_tests(trained_model, test_dataloaders, metric)
-        performance = performance['client_test_0']
+        performance = performance["client_test_0"]
 
         performances.append([strat.__name__, seed, performance])
 
@@ -114,6 +118,6 @@ for strat in strategies:
 
 # Convert performances into a dataframe
 import pandas as pd
-df = pd.DataFrame(performances, columns=['strategy', 'seed', 'performance'])
-df.to_csv(os.path.join(result_dir, f'fl_strategy_os_{num_updates}.csv'), index=False)
 
+df = pd.DataFrame(performances, columns=["strategy", "seed", "performance"])
+df.to_csv(os.path.join(result_dir, f"fl_strategy_os_{num_updates}.csv"), index=False)

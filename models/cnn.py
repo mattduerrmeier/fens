@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 NUM_CLASSES = 62
 
+
 class CNN(nn.Module):
     """
     Class for a CNN Model for FEMNIST

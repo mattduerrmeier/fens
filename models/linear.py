@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import torch
 import torch.nn.init as init
 
+
 class LinearAggregator(nn.Module):
     def __init__(self, total_clients, num_classes):
         self.num_classes = num_classes

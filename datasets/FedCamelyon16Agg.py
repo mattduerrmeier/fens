@@ -1,5 +1,6 @@
 import sys
-sys.path.append('../')
+
+sys.path.append("../")
 
 from .Dataset import Dataset
 
@@ -13,8 +14,8 @@ import os
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
-class FedCamelyon16Agg(Dataset):
 
+class FedCamelyon16Agg(Dataset):
     def __init__(self, size, args):
         super().__init__(size, args)
 
@@ -25,9 +26,9 @@ class FedCamelyon16Agg(Dataset):
         self.args = args
         self.rng = np.random.default_rng(args.seed)
         self.generator = torch.Generator().manual_seed(args.seed)
-        
+
         if not self.args.logitpath:
-            raise ValueError('Logit path must be specified for FedCamelyon16Agg')
+            raise ValueError("Logit path must be specified for FedCamelyon16Agg")
 
         self.generator = torch.Generator().manual_seed(self.args.seed)
         self.num_classes = 2
@@ -36,40 +37,51 @@ class FedCamelyon16Agg(Dataset):
         self.load_testset()
 
     def load_trainset(self):
-        logging.info('==> load train data')
-        
-        logit_trainset_path = os.path.join(self.args.logitpath, 'logits.pth')
+        logging.info("==> load train data")
+
+        logit_trainset_path = os.path.join(self.args.logitpath, "logits.pth")
         self.trainset = torch.load(logit_trainset_path)
 
         # Set num_samples
         new_num_samples = []
         for i in range(self.size):
-            client_data, proxy_data = self.trainset[i]['train'], self.trainset[i]['proxy']
+            client_data, proxy_data = (
+                self.trainset[i]["train"],
+                self.trainset[i]["proxy"],
+            )
             data_len = len(proxy_data)
             if self.args.include_trainset:
                 data_len += int(len(client_data) * self.args.include_trainset_frac)
             new_num_samples.append(data_len)
         self.num_samples = np.array(new_num_samples)
-    
-    def load_testset(self):
-        logging.info('==> load test data')
 
-        logit_testset_path = os.path.join(self.args.logitpath, 'logits.pth')
-        logit_testset = torch.load(logit_testset_path)['test']
-        
+    def load_testset(self):
+        logging.info("==> load test data")
+
+        logit_testset_path = os.path.join(self.args.logitpath, "logits.pth")
+        logit_testset = torch.load(logit_testset_path)["test"]
+
         if self.args.val_set:
             val_len = int(len(logit_testset) * self.args.val_ratio)
-            self.valset, self.testset = random_split(logit_testset, [val_len, len(logit_testset) - val_len], generator=self.generator)
+            self.valset, self.testset = random_split(
+                logit_testset,
+                [val_len, len(logit_testset) - val_len],
+                generator=self.generator,
+            )
         else:
             self.testset = logit_testset
-        
-        logging.info('==> val set size: {}'.format(len(self.valset) if self.valset else 0))
-        logging.info('==> test set size: {}'.format(len(self.testset)))
+
+        logging.info(
+            "==> val set size: {}".format(len(self.valset) if self.valset else 0)
+        )
+        logging.info("==> test set size: {}".format(len(self.testset)))
 
     def fetch(self, client_index):
+        client_data, proxy_data = (
+            self.trainset[client_index]["train"],
+            self.trainset[client_index]["proxy"],
+        )
 
-        client_data, proxy_data = self.trainset[client_index]['train'], self.trainset[client_index]['proxy']
-        
         train_loader = None
         if self.args.include_trainset:
             # Create a new rng every time to replicate the same subset of data
@@ -81,38 +93,50 @@ class FedCamelyon16Agg(Dataset):
             indices = list(tmp_rng.choice(indices, sub_len, replace=False))
             client_data = [client_data[i] for i in indices]
 
-            train_loader = torch.utils.data.DataLoader(client_data + proxy_data, 
-                                            batch_size=self.args.bs, 
-                                            shuffle=True, 
-                                            pin_memory=True)
-            
-            logging.info('==> Client id {}, samples from trainset {}, samples from proxyset: {}' \
-                        .format(client_index, len(client_data), len(proxy_data)))
-    
+            train_loader = torch.utils.data.DataLoader(
+                client_data + proxy_data,
+                batch_size=self.args.bs,
+                shuffle=True,
+                pin_memory=True,
+            )
+
+            logging.info(
+                "==> Client id {}, samples from trainset {}, samples from proxyset: {}".format(
+                    client_index, len(client_data), len(proxy_data)
+                )
+            )
+
         else:
-            train_loader = torch.utils.data.DataLoader(proxy_data, 
-                                        batch_size=self.args.bs, 
-                                        shuffle=True, 
-                                        num_workers=1)
-        
-            logging.info('==> Client id {}, samples from trainset {}, samples from proxyset: {}' \
-                        .format(client_index, 0, len(proxy_data)))
-    
-        test_loader = torch.utils.data.DataLoader(self.testset, 
-                                            batch_size=self.args.test_bs, 
-                                            shuffle=False, 
-                                            num_workers=1)
+            train_loader = torch.utils.data.DataLoader(
+                proxy_data, batch_size=self.args.bs, shuffle=True, num_workers=1
+            )
+
+            logging.info(
+                "==> Client id {}, samples from trainset {}, samples from proxyset: {}".format(
+                    client_index, 0, len(proxy_data)
+                )
+            )
+
+        test_loader = torch.utils.data.DataLoader(
+            self.testset, batch_size=self.args.test_bs, shuffle=False, num_workers=1
+        )
         val_loader = None
         if self.valset:
-            val_loader = torch.utils.data.DataLoader(self.valset, 
-                                            batch_size=self.args.test_bs, 
-                                            shuffle=False, 
-                                            num_workers=1)
-        
+            val_loader = torch.utils.data.DataLoader(
+                self.valset, batch_size=self.args.test_bs, shuffle=False, num_workers=1
+            )
+
         # TODO: if needed
         local_test_loader = None
-        return train_loader, None, val_loader, test_loader, local_test_loader, self.num_samples
-    
+        return (
+            train_loader,
+            None,
+            val_loader,
+            test_loader,
+            local_test_loader,
+            self.num_samples,
+        )
+
     # https://github.com/owkin/FLamby/blob/main/flamby/datasets/fed_camelyon16/metric.py
     @staticmethod
     def metric(y_true, y_pred):
@@ -123,7 +147,7 @@ class FedCamelyon16Agg(Dataset):
             return roc_auc_score(y_true, y_pred)
         except ValueError:
             return np.nan
-    
+
     # https://github.com/owkin/FLamby/blob/main/flamby/datasets/fed_camelyon16/loss.py
     class criterion(_Loss):
         def __init__(self, reduction="mean"):
@@ -132,4 +156,3 @@ class FedCamelyon16Agg(Dataset):
 
         def forward(self, input: torch.Tensor, target: torch.Tensor):
             return self.bce(input, target)
-
