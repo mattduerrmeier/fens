@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# pass this param to record the runs
+wandb_entity=$1
+
+# root_dir: <absolute_path_to_the_root_of_this_repository>
+# run from the root of this project and it will work
+root_dir=$PWD
+
+# env_python: <point_to_your_conda_python_interpreter>
+env_python="$(which python)"
+
+gpu_idx=0
+dataset=FedHeartDisease
+seeds=(91)
+
+for seed in "${seeds[@]}"; do
+    save_dir=flamby/local_training/${dataset}_${seed}
+    log_dir=$root_dir/results/$save_dir
+    mkdir -p "$log_dir"
+
+    # count time for experiment
+    start=$(date +%s)
+
+    # 90/10 split? To confirm
+    proxy_frac=0.1
+    test_every=1
+    # the number of epochs local clients train for
+    epochs=1
+
+    # TODO: find the values to use; these were the defaults
+    # these 4 params are used in `evaluate_all_aggregations()` (aggs.py)
+    # learning rate and number of epochs for the linear mapping and neural net mapping
+    lm_lr=1e-4
+    lm_epochs=100
+    nn_lr=5e-5
+    nn_epochs=200
+
+    "$env_python" $root_dir/flamby/main.py \
+        --dataset "$dataset" \
+        --seed "$seed" \
+        --gpu_idx "$gpu_idx" \
+        --result_dir "$log_dir" \
+        --proxy_frac "$proxy_frac" \
+        --test_every "$test_every" \
+        --lm_lr "$lm_lr" \
+        --lm_epochs "$lm_epochs" \
+        --nn_lr "$nn_lr" \
+        --nn_epochs "$nn_epochs" \
+        --epochs "$epochs" \
+        --wandb_project fens \
+        --wandb_entity "$wandb_entity"
+
+    end=$(date +%s)
+    runtime=$((end - start))
+    echo "==> Time taken: $((runtime / 3600)):$(((runtime / 60) % 60)):$((runtime % 60))"
+done
