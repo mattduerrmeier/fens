@@ -47,11 +47,16 @@ def parse_arguments():
     parser.add_argument(
         "--trained_models_path", type=str, default=None, help="Trained models path"
     )
+
+    # wandb params
     parser.add_argument(
         "--wandb_project", type=str, default="fens", help="Wandb project name"
     )
     parser.add_argument(
         "--wandb_entity", type=str, default="fens", help="Wandb entity name"
+    )
+    parser.add_argument(
+        "--disable_wandb", action="store_true", help="disable logging to wandb"
     )
 
     args = parser.parse_args()

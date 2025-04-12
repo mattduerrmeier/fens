@@ -30,7 +30,8 @@ for seed in "${seeds[@]}"; do
         --lm_epochs 100 \
         --nn_lr 5e-5 \
         --nn_epochs 200 \
-        --epochs 1
+        --epochs 1 \
+        --disable_wandb
 
     end=$(date +%s)
     runtime=$((end - start))

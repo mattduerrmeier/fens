@@ -285,7 +285,11 @@ if __name__ == "__main__":
 
     # initialize wandb
     wandb.init(
-        project=args.wandb_project, entity=args.wandb_entity, name=run_name, config=args
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        name=run_name,
+        config=args,
+        mode="disabled" if args.disable_wandb else "online",
     )
 
     run(args, device)

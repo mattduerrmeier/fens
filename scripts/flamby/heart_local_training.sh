@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# pass this param to record the runs
-wandb_entity=$1
-
 # root_dir: <absolute_path_to_the_root_of_this_repository>
 # run from the root of this project and it will work
 root_dir=$PWD
@@ -48,8 +45,7 @@ for seed in "${seeds[@]}"; do
         --nn_lr "$nn_lr" \
         --nn_epochs "$nn_epochs" \
         --epochs "$epochs" \
-        --wandb_project fens \
-        --wandb_entity "$wandb_entity"
+        --disable_wandb
 
     end=$(date +%s)
     runtime=$((end - start))
