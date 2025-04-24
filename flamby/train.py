@@ -25,16 +25,21 @@ def train_and_evaluate(
     model = model.to(device)
     best_model = None
 
-    losses = 0
-    count = 0
+    # losses = 0
+    # count = 0
     epoch = 0
-
     best_acc = 0.0
 
-    y_preds = []
-    y_trues = []
+    # y_preds = []
+    # y_trues = []
 
     while epoch < iterations:
+        losses = 0
+        count = 0
+
+        y_preds = []
+        y_trues = []
+
         epoch += 1
         for data, target in train_loader:
             y_trues.append(target)

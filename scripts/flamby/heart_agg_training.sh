@@ -10,7 +10,7 @@ declare -A fed_heart_config=(
     ["num_clients"]=4
 )
 
-# TODO: what's the difference between these two values?
+# no difference between these two values
 size="${fed_heart_config["num_clients"]}"
 totalclients="${fed_heart_config["num_clients"]}"
 dataset=FedHeartDiseaseAgg
@@ -28,7 +28,7 @@ local_step="${fed_heart_config["local_step"]}"
 bs="${fed_heart_config["batch_size"]}"
 rounds="${fed_heart_config["global_rounds"]}"
 
-model=SmallNN_FHD # TODO: is this the correct model to use?
+model=SmallNN_FHD
 
 # root_dir: <absolute_path_to_the_root_of_this_repository>
 # run from the root of this project and it will work
@@ -40,9 +40,9 @@ env_python="$(which python)"
 
 # iterate over seeds
 for seed in "${seeds[@]}"; do
-    logit_path="${root_dir}/results/flamby/local_training/FedHeartDisease_${seed}"
+    logit_path="${root_dir}/results/flamby/local_training/FedHeartDisease_${seed}_epochs1"
 
-    name="${dataset}_${optimizer}_${seed}_${proxy_ratio}"
+    name="${dataset}_${optimizer}_${seed}_${proxy_ratio}_epochs1"
     mkdir -p "$log_dir/$name"
 
     # count time for experiment
