@@ -8,6 +8,7 @@ import pandas as pd
 from utils import load_trainset_combined, generate_logits_combined
 from train import train_and_evaluate, evaluate
 from aggs import evaluate_all_aggregations
+from vae import VAE, KDLoss
 
 
 def get_parameters(dataset):
@@ -80,7 +81,7 @@ def get_parameters(dataset):
         "baseline_loss": BaselineLoss,
         "metric": metric,
         "require_argmax": require_argmax,
-        "nn_model": SmallNN,
+        "nn_model": SmallNN, # TODO: define a new smalNN for our task
     }
 
     return params
@@ -100,20 +101,20 @@ def run(args, device):
         force=True,
     )
 
-    p = get_parameters(args.dataset)
-    FedDataset = p["fed_dataset"]
+    params = get_parameters(args.dataset)
+    FedDataset = params["fed_dataset"]
 
     if args.epochs != -1:
-        p["num_epochs"] = args.epochs
+        params["num_epochs"] = args.epochs
 
     # create test dataset
     testset = FedDataset(train=False, pooled=True)
     test_dataloader = torch.utils.data.DataLoader(
         testset,
-        batch_size=p["batch_size"],
+        batch_size=params["batch_size"],
         shuffle=False,
         num_workers=0,
-        collate_fn=p["collate_fn"],
+        collate_fn=params["collate_fn"],
     )
 
     trained_models = []
@@ -123,7 +124,9 @@ def run(args, device):
     if not os.path.exists(args.result_dir):
         os.makedirs(args.result_dir)
 
-    for i in range(p["num_clients"]):
+    ### 1. train each client's VAE
+    for i in range(params["num_clients"]):
+        print(f'Training VAE {i+1}/{params["num_clients"]}')
         id_str = f"client_{i}"
         logging.info(f"[Training client {i}]")
 
@@ -131,22 +134,24 @@ def run(args, device):
             args.dataset,
             i,
             FedDataset,
-            p["num_classes"],
+            params["num_classes"],
             proxy_frac=args.proxy_frac,
             seed=args.seed,
         )
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
-            batch_size=p["batch_size"],
+            batch_size=params["batch_size"],
             shuffle=True,
             num_workers=1,
-            collate_fn=p["collate_fn"],
+            collate_fn=params["collate_fn"],
         )
         proxy_datasets.extend(proxy_dataset)
         label_dists.append(label_dist)
 
         torch.manual_seed(args.seed + i)
-        model = p["baseline"]()
+
+        D_in = len(train_dataset[0][0])
+        model = VAE(D_in)
 
         if args.use_trained_models:
             logging.info(f"Loading trained model {i}")
@@ -154,8 +159,8 @@ def run(args, device):
                 torch.load(os.path.join(args.trained_models_path, f"{i}_final.pth"))
             )
         else:
-            lossfunc = p["baseline_loss"]()
-            optimizer = p["optimizer"](model.parameters(), lr=p["lr"])
+            lossfunc = KDLoss()
+            optimizer = params["optimizer"](model.parameters(), lr=params["lr"])
 
             # Constant learning rate scheduler
             scheduler = torch.optim.lr_scheduler.StepLR(
@@ -163,7 +168,7 @@ def run(args, device):
             )
             model.to(device)
 
-            best_acc, best_model = train_and_evaluate(
+            best_loss, best_model = train_and_evaluate(
                 id_str,
                 model,
                 lossfunc,
@@ -171,13 +176,10 @@ def run(args, device):
                 scheduler,
                 train_dataloader,
                 test_dataloader,
-                p["num_epochs"],
+                params["num_epochs"],
                 device,
-                test_every=args.test_every,
-                metric=p["metric"],
-                require_argmax=p["require_argmax"],
             )
-            logging.info(f"Best accuracy: {best_acc}")
+            logging.info(f"Best loss: {best_loss:.4f}")
 
             model = best_model
             if args.save_model:
@@ -188,45 +190,53 @@ def run(args, device):
         # Add trained model to the list
         trained_models.append(model)
 
-    # Evaluation
+    # evaluation of the VAE
     if not args.use_trained_models:
         client_results = {}
-        for i in range(p["num_clients"]):
+        for i in range(params["num_clients"]):
+            print(f'Evaluating VAE {i+1}/{params["num_clients"]}')
             id_str = f"client_{i}"
             logging.info(f"[Evaluating client {i}]")
-            test_loss, test_acc = evaluate(
+
+            loss_func = KDLoss()
+            test_loss = evaluate(
                 trained_models[i],
-                p["baseline_loss"](),
+                loss_func,
                 test_dataloader,
                 device,
-                p["metric"],
-                require_argmax=p["require_argmax"],
             )
-            logging.info(f"Loss: {test_loss:.4f} Accuracy: {test_acc:.4f}")
-            wandb.run.summary[f"{id_str}/best_acc"] = test_acc
-            wandb.run.summary[f"{id_str}/best_loss"] = test_loss
-            client_results[id_str] = test_acc
 
-        logits = generate_logits_combined(
-            args.dataset,
-            trained_models,
-            p["fed_dataset"],
-            p["num_classes"],
-            args.proxy_frac,
-            device,
-            test_dataloader,
-            p["num_clients"],
-            p["batch_size"],
-            args.seed,
-            p["collate_fn"],
-        )
+            logging.info(f"Loss: {test_loss:.4f}")
+            wandb.run.summary[f"{id_str}/best_loss"] = test_loss
+            client_results[id_str] = test_loss
+
+        # What do we need the logits for? Do we still need them for Fens?
+        # logits = generate_logits_combined(
+        #     args.dataset,
+        #     trained_models,
+        #     params["fed_dataset"],
+        #     params["num_classes"],
+        #     args.proxy_frac,
+        #     device,
+        #     test_dataloader,
+        #     params["num_clients"],
+        #     params["batch_size"],
+        #     args.seed,
+        #     params["collate_fn"],
+        # )
+        #
+    import sys
+    sys.exit()
+
+    # TODO: add the server's MLP
+    # Here, should we evaluate the aggregations on the MLP?
 
     proxy_dataloader = torch.utils.data.DataLoader(
         proxy_datasets,
-        batch_size=p["batch_size"],
+        batch_size=params["batch_size"],
         shuffle=True,
         num_workers=0,
-        collate_fn=p["collate_fn"],
+        collate_fn=params["collate_fn"],
     )
 
     trainable_agg_params = {
@@ -234,8 +244,8 @@ def run(args, device):
         "lm_epochs": args.lm_epochs,
         "nn_lr": args.nn_lr,
         "nn_epochs": args.nn_epochs,
-        "nn_model": p["nn_model"],
-        "criterion": p["baseline_loss"](),
+        "nn_model": params["nn_model"],
+        "criterion": params["baseline_loss"](),
     }
 
     agg_results = evaluate_all_aggregations(
@@ -243,10 +253,10 @@ def run(args, device):
         test_dataloader,
         trained_models,
         label_dists,
-        p["metric"],
+        params["metric"],
         device,
         trainable_agg_params,
-        require_argmax=p["require_argmax"],
+        require_argmax=params["require_argmax"],
     )
 
     # save all results
@@ -255,6 +265,7 @@ def run(args, device):
     if not args.use_trained_models:
         for client_id, acc in client_results.items():
             all_results.append((client_id, args.seed, acc))
+
         client_df = pd.DataFrame(all_results, columns=["client_id", "seed", "accuracy"])
         client_df.to_csv(
             os.path.join(args.result_dir, "client_results.csv"), index=False
@@ -268,6 +279,7 @@ def run(args, device):
     all_results = []
     for agg, acc in agg_results.items():
         all_results.append((agg, args.seed, acc))
+
     agg_df = pd.DataFrame(all_results, columns=["agg", "seed", "accuracy"])
     agg_df.to_csv(os.path.join(args.result_dir, "agg_results.csv"), index=False)
 
