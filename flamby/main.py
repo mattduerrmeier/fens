@@ -4,6 +4,7 @@ import os
 import logging
 import wandb
 import pandas as pd
+import sys
 
 from utils import load_trainset_combined, generate_logits_combined
 from train import train_and_evaluate, evaluate
@@ -81,7 +82,7 @@ def get_parameters(dataset):
         "baseline_loss": BaselineLoss,
         "metric": metric,
         "require_argmax": require_argmax,
-        "nn_model": SmallNN, # TODO: define a new smalNN for our task
+        "nn_model": SmallNN,  # TODO: define a new smalNN for our task
     }
 
     return params
@@ -126,7 +127,7 @@ def run(args, device):
 
     ### 1. train each client's VAE
     for i in range(params["num_clients"]):
-        print(f'Training VAE {i+1}/{params["num_clients"]}')
+        print(f"Training VAE {i + 1}/{params['num_clients']}")
         id_str = f"client_{i}"
         logging.info(f"[Training client {i}]")
 
@@ -159,7 +160,7 @@ def run(args, device):
                 torch.load(os.path.join(args.trained_models_path, f"{i}_final.pth"))
             )
         else:
-            lossfunc = KDLoss()
+            loss_fn = KDLoss()
             optimizer = params["optimizer"](model.parameters(), lr=params["lr"])
 
             # Constant learning rate scheduler
@@ -171,7 +172,7 @@ def run(args, device):
             best_loss, best_model = train_and_evaluate(
                 id_str,
                 model,
-                lossfunc,
+                loss_fn,
                 optimizer,
                 scheduler,
                 train_dataloader,
@@ -194,14 +195,14 @@ def run(args, device):
     if not args.use_trained_models:
         client_results = {}
         for i in range(params["num_clients"]):
-            print(f'Evaluating VAE {i+1}/{params["num_clients"]}')
+            print(f"Evaluating VAE {i + 1}/{params['num_clients']}")
             id_str = f"client_{i}"
             logging.info(f"[Evaluating client {i}]")
 
-            loss_func = KDLoss()
-            test_loss = evaluate(
+            loss_fn = KDLoss()
+            test_loss, _, _ = evaluate(
                 trained_models[i],
-                loss_func,
+                loss_fn,
                 test_dataloader,
                 device,
             )
@@ -225,7 +226,6 @@ def run(args, device):
         #     params["collate_fn"],
         # )
         #
-    import sys
     sys.exit()
 
     # TODO: add the server's MLP

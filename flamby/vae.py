@@ -12,8 +12,6 @@ class VAE(nn.Module):
     def __init__(self, D_in, H=48, H2=32, latent_dim=16):
         super().__init__()
         # encoder part
-        # self.optimizer = None
-        # self.criterion = None
         self.linear1 = nn.Linear(D_in, H)
         self.lin_bn1 = nn.BatchNorm1d(num_features=H)
         self.linear2 = nn.Linear(H, H2)
@@ -40,7 +38,6 @@ class VAE(nn.Module):
         self.lin_bn5 = nn.BatchNorm1d(num_features=H)
         self.linear6 = nn.Linear(H, D_in)
         self.lin_bn6 = nn.BatchNorm1d(num_features=D_in)
-
 
     def encode(self, x):
         x = F.relu(self.lin_bn1(self.linear1(x)))
@@ -75,14 +72,15 @@ class VAE(nn.Module):
         out = self.decode(z)
         return out, mu, logvar
 
+
 class KDLoss(nn.Module):
     """KD Loss for the VAE model."""
+
     def __init__(self):
         super().__init__()
         self.mse_loss = nn.MSELoss(reduction="sum")
 
     def forward(self, x_recon, x, mu, logvar):
-        loss_MSE = self.mse_loss(x_recon, x)
-        loss_KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-        return loss_MSE + loss_KLD
+        mse = self.mse_loss(x_recon, x)
+        kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return mse, kld
