@@ -76,20 +76,26 @@ The aggregator training runs parallely for all clients using pyTorch Distributed
 > [!IMPORTANT]
 > you need to install FLamby from the source to reproduce these experiments. Fens relies on it to load the datasets, and they must be installed via FLamby. If you don't install them this way, it will complain that the datasets are not available.
 
-FLamby does not pin the dependencies to specific versions.
-Create the fens environment and install the necessary dependencies from `environment.yml`.
-Then, to install FLamby, runs these commands:
+FLamby's preprocessing and loading components are available as a GitHub repository (`owkin/FLamby`).
+FENS requires on these components.
+Since they are not published as a PyPI package, we need to install them from source.
+To ensure that all developers working on this project use the same version of FLamby, we added the FLamby repository as a submodule to this repository.
+
+This project's dependency is properly defined in the `Pipfile`.
+If you use `pipenv` to manage your dependencies, FLamby will be properly built when installing this project's dependencies.
+
+If you don't use pipenv, you can run the following commands to get FLamby properly set up.
 
 ```sh
-git clone https://github.com/owkin/FLamby.git flamby-repo # there already exists a flamby dir
 cd flamby-repo
 pip install -e .[heart,isic2019] # list of the datasets you want to install
 ```
 
-You still need to download the datasets via FLamby.
+Regardless of the installation method, you still need to download the datasets via FLamby.
 Visit its repository to install them.
-- [Fed-heart instructions](https://github.com/owkin/FLamby/tree/edacf54d5211520583b0133d55ac39b6fda8324b/flamby/datasets/fed_heart_disease)
-- [Fed-ISIC link instructions](https://github.com/owkin/FLamby/tree/edacf54d5211520583b0133d55ac39b6fda8324b/flamby/datasets/fed_isic2019)
+
+- [Fed-heart instructions](./flamby-repo/flamby/datasets/fed_heart_disease/README.md)
+- [Fed-ISIC link instructions](./flamby-repo/flamby/datasets/fed_isic2019/README.md)
 
 Note that FLamby has a lot of dependencies we don't need to just download the datasets.
 We may want to grab only the code we need and add it to this repo instead.
