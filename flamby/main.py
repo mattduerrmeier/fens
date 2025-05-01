@@ -211,7 +211,7 @@ def run(args, device):
             wandb.run.summary[f"{id_str}/best_loss"] = test_loss
             client_results[id_str] = test_loss
 
-        # What do we need the logits for? Do we still need them for Fens?
+        # TODO: What do we need the logits for? Do we still need them for Fens?
         # logits = generate_logits_combined(
         #     args.dataset,
         #     trained_models,
@@ -226,10 +226,7 @@ def run(args, device):
         #     params["collate_fn"],
         # )
         #
-    sys.exit()
 
-    # TODO: add the server's MLP
-    # Here, should we evaluate the aggregations on the MLP?
 
     proxy_dataloader = torch.utils.data.DataLoader(
         proxy_datasets,
@@ -239,13 +236,17 @@ def run(args, device):
         collate_fn=params["collate_fn"],
     )
 
+    # NN model must take the vaes as input and blend them
+    # unsure where to train the MLP at this point?
+    mse_metric = torch.nn.MSELoss()
+
     trainable_agg_params = {
         "lm_lr": args.lm_lr,
         "lm_epochs": args.lm_epochs,
         "nn_lr": args.nn_lr,
         "nn_epochs": args.nn_epochs,
         "nn_model": params["nn_model"],
-        "criterion": params["baseline_loss"](),
+        "criterion": mse_metric,
     }
 
     agg_results = evaluate_all_aggregations(
@@ -253,11 +254,13 @@ def run(args, device):
         test_dataloader,
         trained_models,
         label_dists,
-        params["metric"],
+        mse_metric,
         device,
         trainable_agg_params,
         require_argmax=params["require_argmax"],
     )
+
+    # TODO: train and evaluate the server's MLP, with the different aggregation schemes
 
     # save all results
     # save client results if not loaded from trained models
@@ -266,21 +269,21 @@ def run(args, device):
         for client_id, acc in client_results.items():
             all_results.append((client_id, args.seed, acc))
 
-        client_df = pd.DataFrame(all_results, columns=["client_id", "seed", "accuracy"])
+        client_df = pd.DataFrame(all_results, columns=["client_id", "seed", "test_loss"])
         client_df.to_csv(
             os.path.join(args.result_dir, "client_results.csv"), index=False
         )
 
         # save logits
-        logits_file = os.path.join(args.result_dir, "logits.pth")
-        torch.save(logits, logits_file, pickle_protocol=2)
+        # logits_file = os.path.join(args.result_dir, "logits.pth")
+        # torch.save(logits, logits_file, pickle_protocol=2)
 
     # save aggregation results
     all_results = []
     for agg, acc in agg_results.items():
         all_results.append((agg, args.seed, acc))
 
-    agg_df = pd.DataFrame(all_results, columns=["agg", "seed", "accuracy"])
+    agg_df = pd.DataFrame(all_results, columns=["agg", "seed", "mse_loss"])
     agg_df.to_csv(os.path.join(args.result_dir, "agg_results.csv"), index=False)
 
     logging.info("Saved successfully")

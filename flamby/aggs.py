@@ -110,27 +110,34 @@ def averaging(dataset, metric, total_clients, num_classes, require_argmax=False)
     y_preds = []
     y_trues = []
 
-    for X, y in dataset:
-        if require_argmax:
-            # X: (batch_size, total_clients * num_classes)
-            X = torch.reshape(X, (-1, total_clients, num_classes))
-            y_pred = torch.mean(X, dim=1).argmax(dim=1)
-        else:
-            # X: (batch_size, total_clients)
-            X = torch.sigmoid(X)
-            y_pred = torch.mean(X, dim=1)
-            y_pred = torch.log(y_pred / (1 - y_pred))
+    # out from the model, target is the original X
+    inputs = []
+    outputs = []
+    for out, data, _ in dataset:
+        out = torch.mean(out, dim=0)
+        # if require_argmax:
+        #     # out: (batch_size, total_clients * num_classes)
+        #     out = torch.reshape(out, (-1, total_clients, num_classes))
+        #     out = torch.mean(out, dim=0).argmax(dim=1)
+        # else:
+        #     # out: (batch_size, total_clients)
+        #     out = torch.sigmoid(out)
+        #     out = torch.log(out / (1 - out))
 
-        y_preds.append(y_pred)
-        y_trues.append(y)
+        # y_preds.append(y_pred)
+        # y_trues.append(y)
+        inputs.append(data)
+        outputs.append(out)
 
-    y_preds_np = np.concatenate(y_preds)
-    y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
+    # y_preds_np = np.concatenate(y_preds)
+    # y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
 
-    y_trues_np = np.concatenate(y_trues)
-    y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
+    # y_trues_np = np.concatenate(y_trues)
+    # y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
+    inputs = torch.cat(inputs)
+    outputs = torch.cat(outputs)
 
-    avg_performance = metric(y_trues_np, y_preds_np)
+    avg_performance = metric(outputs, inputs).item()
     logging.info(f"==> Averaging Performance: {avg_performance:.4f}")
 
     return avg_performance
@@ -146,36 +153,41 @@ def weighted_averaging(
         my_labels_tensor / label_sum_tensor
     )  # (num_clients, num_classes)
 
-    y_preds = []
-    y_trues = []
-    for X, y in dataset:
-        if require_argmax:
-            # X: (batch_size, total_clients * num_classes)
-            X = torch.reshape(X, (-1, total_clients, num_classes))
-            X = X * my_weights_tensor
-            y_pred = torch.sum(X, dim=1).argmax(dim=1)
-        else:
-            # X: (batch_size, total_clients)
-            X = torch.sigmoid(X)
-            X_complement = 1 - X
-            X_all = torch.stack(
-                (X_complement, X), dim=2
-            )  # (batch_size, total_clients, 2)
-            X = X_all * my_weights_tensor  # (batch_size, total_clients, 2)
-            y_avg = torch.sum(X, dim=1)
-            y_avg = torch.softmax(y_avg, dim=1)
-            y_pred = torch.log(y_avg[:, 1] / y_avg[:, 0])
+    inputs = []
+    outputs = []
+    for out, data, labels in dataset:
+        local_weight = my_weights_tensor[:, labels.int()]
+        out = out * local_weight
+        out = torch.sum(out, dim=0)
+        # if require_argmax:
+        #     # out: (batch_size, total_clients * num_classes)
+        #     out = torch.reshape(out, (-1, total_clients, num_classes))
+        #     out = out * my_weights_tensor
+        #     y_pred = torch.sum(out, dim=1).argmax(dim=1)
+        # else:
+        #     # out: (batch_size, total_clients)
+        #     out = torch.sigmoid(out)
+        #     out_complement = 1 - out
+        #     out_all = torch.stack(
+        #         (out_complement, out), dim=2
+        #     )  # (batch_size, total_clients, 2)
+        #     out = out_all * my_weights_tensor  # (batch_size, total_clients, 2)
+        #     out = torch.sum(out, dim=1)
+        #     out = torch.softmax(out, dim=1)
+        #     out = torch.log(out[:, 1] / out[:, 0])
 
-        y_preds.append(y_pred)
-        y_trues.append(y)
+        inputs.append(data)
+        outputs.append(out)
 
-    y_preds_np = np.concatenate(y_preds)
-    y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
+    # y_preds_np = np.concatenate(y_preds)
+    # y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
 
-    y_trues_np = np.concatenate(y_trues)
-    y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
+    # y_trues_np = np.concatenate(y_trues)
+    # y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
+    inputs = torch.cat(inputs)
+    outputs = torch.cat(outputs)
 
-    wavg_performance = metric(y_trues_np, y_preds_np)
+    wavg_performance = metric(outputs, inputs).item()
     logging.info(f"==> Weighted Averaging Performance: {wavg_performance:.4f}")
 
     return wavg_performance
@@ -394,20 +406,22 @@ def evaluate_all_aggregations(
 
     # Create the dataset of predictions for training and testing
     trainset = []
+    # we select the X_hat predicted by each vae, as well as the input X
     with torch.no_grad():
         for elems, labels in train_loader:
             elems = elems.to(device)
-            outputs = [model(elems).detach().cpu() for model in models]
-            stacked_outputs = torch.hstack(outputs)
-            trainset.append((stacked_outputs, labels))
+            outputs = [model(elems)[0].detach().cpu() for model in models]
+            stacked_outputs = torch.stack(outputs)
+            trainset.append((stacked_outputs, elems, labels))
 
     testset = []
+    # we select the X_hat predicted by each vae, as well as the input X
     with torch.no_grad():
         for elems, labels in test_loader:
             elems = elems.to(device)
-            outputs = [model(elems).detach().cpu() for model in models]
-            stacked_outputs = torch.hstack(outputs)
-            testset.append((stacked_outputs, labels))
+            outputs = [model(elems)[0].detach().cpu() for model in models]
+            stacked_outputs = torch.stack(outputs)
+            testset.append((stacked_outputs, elems, labels))
 
     results = {}
 
@@ -421,6 +435,9 @@ def evaluate_all_aggregations(
     )
     results["wavg"] = wavg_performance
 
+    return results
+
+    # TODO: fix the next ones
     voting_performance = polychotomous_voting(
         testset,
         metric,
