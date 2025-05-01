@@ -1,0 +1,14 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+torch = "*"
+flamby = {extras = ["heart"], file = "flamby-repo", editable = true}
+wandb = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.13"
