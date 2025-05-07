@@ -22,7 +22,6 @@ def train_and_evaluate_aggs(
     wandb.define_metric(f"{id_str}/epoch")
     wandb.define_metric(f"{id_str}/*", step_metric=f"{id_str}/epoch")
 
-    model.train()
     model = model.to(device)
 
     best_model = None
@@ -32,11 +31,13 @@ def train_and_evaluate_aggs(
         loss_acc = 0.0
         mse_acc, kld_acc = 0.0, 0.0
 
-        count = 0
+        model.train()
         for data, target in train_loader:
             data = data.swapaxes(0, 1)
             data = data.to(device)
             target = target.to(device)
+
+            optimizer.zero_grad()
 
             # forward pass
             out = model(data)
@@ -46,15 +47,13 @@ def train_and_evaluate_aggs(
             # backward pass
             loss.backward()
             optimizer.step()
-            optimizer.zero_grad()
 
             # TODO: why is there a coeff here?
             loss_acc += loss.item()  # * data.size(0)
-            count += data.size(0)
 
         scheduler.step()
 
-        train_loss = loss_acc / count
+        train_loss = loss_acc / len(train_loader)
 
         logging.info(
             f"Epoch: {epoch}, train loss: {train_loss:.4f}"
@@ -66,6 +65,7 @@ def train_and_evaluate_aggs(
             }
         )
 
+        model.eval()
         test_loss = evaluate_agg(model, loss_fn, test_loader, device)
         if test_loss < best_loss:
             best_loss = test_loss
@@ -89,7 +89,6 @@ def evaluate_agg(model, loss_fn, test_loader, device):
     model.to(device)
 
     loss_acc = 0.0
-    counts = 0
     with torch.no_grad():
         for data, target in test_loader:
             # fwd pass
@@ -101,9 +100,8 @@ def evaluate_agg(model, loss_fn, test_loader, device):
             loss = loss_fn(out, target)
 
             loss_acc += loss.item()  # * data.size(0)
-            counts += data.size(0)
 
-    loss_acc /= counts
+    loss_acc /= len(test_loader)
     return loss_acc
 
 
@@ -125,7 +123,6 @@ def train_and_evaluate(
     wandb.define_metric(f"{id_str}/epoch")
     wandb.define_metric(f"{id_str}/*", step_metric=f"{id_str}/epoch")
 
-    model.train()
     model = model.to(device)
 
     best_model = None
@@ -135,9 +132,12 @@ def train_and_evaluate(
         loss_acc = 0.0
         mse_acc, kld_acc = 0.0, 0.0
 
+        model.train()
         for data, target in train_loader:
             data = data.to(device)
             target = target.unsqueeze(dim=1).to(device)
+
+            optimizer.zero_grad()
 
             # forward pass
             # TODO: do we pass the target with the data?
@@ -151,7 +151,6 @@ def train_and_evaluate(
             # backward pass
             loss.backward()
             optimizer.step()
-            optimizer.zero_grad()
 
             # TODO: why is there a coeff here?
             loss_acc += loss.item()  # * data.size(0)
@@ -176,6 +175,7 @@ def train_and_evaluate(
             }
         )
 
+        model.eval()
         test_loss, test_mse, test_kld = evaluate(model, loss_fn, test_loader, device)
         if test_loss < best_loss:
             best_loss = test_loss
@@ -203,7 +203,6 @@ def evaluate(model, loss_fn, test_loader, device):
 
     loss_acc = 0.0
     mse_acc, kld_acc = 0.0, 0.0
-    counts = 0
     with torch.no_grad():
         for data, target in test_loader:
             # fwd pass
@@ -218,9 +217,9 @@ def evaluate(model, loss_fn, test_loader, device):
             loss_acc += loss.item()  # * data.size(0)
             mse_acc += mse_loss.item()
             kld_acc += kld_loss.item()
-            counts += data.size(0)
 
-    loss_acc /= counts
-    mse_acc /= counts
-    kld_acc /= counts
+    loss_acc /= len(test_loader)
+    mse_acc /= len(test_loader)
+    kld_acc /= len(test_loader)
+    
     return loss_acc, mse_acc, kld_acc
