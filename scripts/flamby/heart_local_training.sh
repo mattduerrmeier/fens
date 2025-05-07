@@ -19,13 +19,13 @@ epochs=50
 
 # these 4 params are used in `evaluate_all_aggregations()` (aggs.py)
 # learning rate and number of epochs for the linear mapping and neural net mapping
-lm_lr=1e-4
-lm_epochs=100
+lm_lr=1e-3
+lm_epochs=200
 nn_lr=5e-5
 nn_epochs=200
 
 for seed in "${seeds[@]}"; do
-    save_dir="test/" # "flamby/local_training/${dataset}_${seed}_epochs${epochs}"
+    save_dir="test2/" # "flamby/local_training/${dataset}_${seed}_epochs${epochs}"
     log_dir="$root_dir/results/$save_dir"
     mkdir -p "$log_dir"
 
