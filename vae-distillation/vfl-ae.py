@@ -3,7 +3,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from evaluation import HeartDiseaseNN as EvaluatorModel
 from components import encoders, preprocessing
 from models.autoencoder import Autoencoder, Decoder
 from sklearn.metrics import accuracy_score
@@ -11,6 +10,11 @@ from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 
 type FeatureTargetEntry = tuple[torch.Tensor, torch.Tensor]
+
+
+from flamby.datasets.fed_heart_disease import (
+    FedHeartDisease as FedHeartDataset,
+)
 
 
 class MseKldLoss(nn.Module):
@@ -135,7 +139,7 @@ def train_student(
 
     for epoch in range(epochs):
         total_loss = 0
-        
+
         for _ in range(batches):
             latent = teacher_model.sample_latent(epoch_size).detach()
             optimizer.zero_grad()
@@ -157,14 +161,34 @@ def merge(tensors: list[torch.Tensor] | tuple[torch.Tensor, ...]) -> torch.Tenso
     return torch.concat(tensors, dim=1)
 
 
+class EvaluatorModel(nn.Module):
+    def __init__(self, input_dimensions: int):
+        super(EvaluatorModel, self).__init__()
+        self.fc1 = nn.Linear(input_dimensions, 64)
+        self.fc2 = nn.Linear(64, 128)
+        self.fc3 = nn.Linear(128, 256)
+        self.fc4 = nn.Linear(256, 2)
+        self.act = nn.LeakyReLU()
+        self.dropout = nn.Dropout(0.1)
+
+    def forward(self, x: torch.Tensor):
+        x = self.act(self.fc1(x))
+        x = self.act(self.fc2(x))
+        x = self.act(self.fc3(x))
+        x = self.dropout(x)
+        return self.fc4(x)
+
+
 def _run_evaluator_model(
     dataset_train: Dataset[FeatureTargetEntry],
     dataset_test: Dataset[FeatureTargetEntry],
+    *,
+    input_dimensions: int,
 ):
     features_train, targets_train = _load_dataset_as_tensor(dataset_train)
     features_test, targets_test = _load_dataset_as_tensor(dataset_test)
 
-    model = EvaluatorModel()
+    model = EvaluatorModel(input_dimensions)
     optimizer = optim.AdamW(model.parameters())
 
     loss_function = nn.CrossEntropyLoss()
@@ -174,7 +198,7 @@ def _run_evaluator_model(
         optimizer.zero_grad()
 
         outputs_train = model(features_train)
-        loss = loss_function(outputs_train, targets_train.squeeze(dim=1))
+        loss = loss_function(outputs_train, targets_train.squeeze(dim=1).long())
 
         loss.backward()
         optimizer.step()
@@ -205,18 +229,55 @@ def _load_dataset_as_tensor(dataset: Dataset[FeatureTargetEntry]) -> FeatureTarg
 def _evaluate_decoder(
     *,
     model: Decoder | Autoencoder,
-    dataset_train: Dataset[FeatureTargetEntry],
+    training_set_size: int,
     dataset_test: Dataset[FeatureTargetEntry],
+    input_dimensions: int
 ):
     model.eval()
 
-    dataset_train_tensor = _load_dataset_as_tensor(dataset_train)
-
-    latent = model.sample_latent(dataset_train_tensor[0].shape[0])
+    latent = model.sample_latent(training_set_size)
     synthetic_x, synthetic_y = model.sample_from_latent(latent)
 
-    _run_evaluator_model(TensorDataset(synthetic_x.detach(), synthetic_y.detach()), dataset_test)
+    _run_evaluator_model(
+        TensorDataset(synthetic_x.detach(), synthetic_y.detach()), dataset_test,
+        input_dimensions=input_dimensions
+    )
 
+
+def main():
+    dataset = FedHeartDataset(normalize=False)
+
+    encoded_dataset = TensorDataset(*list(torch.tensor(it) for it in dataset.features))
+
+    normalized_dataset = FedHeartDataset(normalize=True)
+    print(len(normalized_dataset.features))
+    print(normalized_dataset.features[0])
+
+    for i in range(5):
+        entry_features, entry_target = dataset[i]
+        print(f"#{i}", entry_features)
+
+    for i in range(5):
+        entry_features = encoded_dataset[i]
+        print(f"#{i}", entry_features)
+
+    for i in range(5):
+        entry_features, entry_target = normalized_dataset[i]
+        print(f"#{i}", entry_features)
+
+
+def _main():
+    dataset_train = FedHeartDataset(train=True)
+    dataset_test = FedHeartDataset(train=False)
+
+    for i in range(5):
+        entry_features, entry_target = dataset_train[i]
+        print(f"#{i}", entry_features)
+
+    for i in range(5):
+        entry_features, entry_target = dataset_test[i]
+        print(f"#{i}", entry_features)
+    
 
 def main(
     *,
@@ -225,63 +286,65 @@ def main(
     np.random.seed(42)
     torch.manual_seed(42)
 
-    dataset = preprocessing.load_dataset(
-        Path(__file__).parent.parent / "datasets" / "heart" / "dataset.csv"
-    )
+    # dataset_train = FedHeartDataset(train=True)
+    # dataset_test = FedHeartDataset(train=False)
 
-    dataset_train, dataset_test = prepare_dataset(dataset, train_test_split)
+    dataset = FedHeartDataset()
+    dataset_train, dataset_test = torch.utils.data.random_split(dataset, (0.8, 0.2))
 
     dataset_train_complete = _load_dataset_as_tensor(dataset_train)
     dataset_train_size = dataset_train_complete[0].shape[0]
-    dataset_train_features_count = dataset_train_complete[0].shape[1] + 1
+    dataset_train_features_count = dataset_train_complete[0].shape[1]
 
     teacher_model = Autoencoder(
-        input_dimensions=dataset_train_features_count,
+        input_dimensions=dataset_train_features_count + 1,
         wide_hidden_dimensions=48,
         narrow_hidden_dimensions=32,
         latent_dimensions=16,
     )
 
     student_model = Decoder(
-        output_dimensions=dataset_train_features_count,
+        output_dimensions=dataset_train_features_count + 1,
         wide_hidden_dimensions=48,
         narrow_hidden_dimensions=32,
         latent_dimensions=16,
     )
 
     print("==============Baseline==============")
-    _run_evaluator_model(dataset_train, dataset_test)
+    _run_evaluator_model(dataset_train, dataset_test, input_dimensions=dataset_train_features_count)
 
     print("==============Training teacher model==========")
     train_teacher(
         teacher_model,
         epochs=200,
-        loader=DataLoader(dataset_train, batch_size=64),
-        optimizer=optim.Adam(teacher_model.parameters(), lr=1e-3),
+        loader=DataLoader(dataset_train, batch_size=32),
+        optimizer=optim.Adam(teacher_model.parameters(), lr=1e-3)#, weight_decay=0.0001),
     )
 
     print("==============Evaluating teacher model==========")
     _evaluate_decoder(
         model=teacher_model,
-        dataset_train=dataset_train,
+        training_set_size=len(dataset_train),
         dataset_test=dataset_test,
+        input_dimensions=dataset_train_features_count,
     )
 
     print("==============Training student model==========")
     train_student(
         student_model=student_model,
         teacher_model=teacher_model,
-        epochs=150,
+        epochs=200,
         epoch_size=dataset_train_size,
-        batch_size=128,
-        optimizer=optim.Adam(student_model.parameters(), lr=1e-3),
+        batch_size=32,
+        optimizer=optim.Adam(student_model.parameters(), lr=1e-2),
     )
 
     print("==============Evaluating student model==========")
     _evaluate_decoder(
         model=student_model,
-        dataset_train=dataset_train,
+        training_set_size=len(dataset_train),
         dataset_test=dataset_test,
+        input_dimensions=dataset_train_features_count
     )
 
 
