@@ -4,6 +4,108 @@ import torch
 import wandb
 import math
 
+def train_and_evaluate_aggs(
+    id_str,
+    model,
+    loss_fn,
+    optimizer,
+    scheduler,
+    train_loader,
+    test_loader,
+    n_epochs,
+    device,
+):
+    """
+    Updated version of the training for the VAE model.
+    No downstream metric for the vae, so we only log the loss.
+    """
+    wandb.define_metric(f"{id_str}/epoch")
+    wandb.define_metric(f"{id_str}/*", step_metric=f"{id_str}/epoch")
+
+    model.train()
+    model = model.to(device)
+
+    best_model = None
+    epoch = 0
+    best_loss = math.inf
+    for epoch in range(1, n_epochs + 1):
+        loss_acc = 0.0
+        mse_acc, kld_acc = 0.0, 0.0
+
+        count = 0
+        for data, target in train_loader:
+            data = data.swapaxes(0, 1)
+            data = data.to(device)
+            target = target.to(device)
+
+            # forward pass
+            out = model(data)
+            # need to extract the two term to be able to log both of them
+            loss = loss_fn(out, target)
+
+            # backward pass
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            # TODO: why is there a coeff here?
+            loss_acc += loss.item()  # * data.size(0)
+            count += data.size(0)
+
+        scheduler.step()
+
+        train_loss = loss_acc / count
+
+        logging.info(
+            f"Epoch: {epoch}, train loss: {train_loss:.4f}"
+        )
+        wandb.log(
+            {
+                f"{id_str}/train_loss": train_loss,
+                f"{id_str}/epoch": epoch,
+            }
+        )
+
+        test_loss = evaluate_agg(model, loss_fn, test_loader, device)
+        if test_loss < best_loss:
+            best_loss = test_loss
+            # store the best model by making a copy
+            best_model = copy.deepcopy(model)
+
+        logging.info(
+            f"Epoch: {epoch} test loss: {test_loss:.4f}"
+        )
+        wandb.log(
+            {
+                f"{id_str}/test_loss": test_loss,
+                f"{id_str}/epoch": epoch,
+            }
+        )
+
+    return best_loss, best_model
+
+def evaluate_agg(model, loss_fn, test_loader, device):
+    model.eval()
+    model.to(device)
+
+    loss_acc = 0.0
+    counts = 0
+    with torch.no_grad():
+        for data, target in test_loader:
+            # fwd pass
+            data = data.swapaxes(0, 1)
+            data = data.to(device)
+            target = target.to(device)
+
+            out = model(data)
+            loss = loss_fn(out, target)
+
+            loss_acc += loss.item()  # * data.size(0)
+            counts += data.size(0)
+
+    loss_acc /= counts
+    return loss_acc
+
 
 def train_and_evaluate(
     id_str,
