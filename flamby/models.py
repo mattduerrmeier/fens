@@ -33,10 +33,12 @@ class SmallNN_FHD(nn.Module):
         super().__init__()
         d = 4
         total_clients = 4
-        self.fc1 = nn.Linear(total_clients, total_clients * d)
-        self.fc2 = nn.Linear(total_clients * d, 1)
+        feature_size = 13
+        self.fc1 = nn.Linear(total_clients * feature_size, feature_size * total_clients * d)
+        self.fc2 = nn.Linear(total_clients * d * feature_size, feature_size)
 
     def forward(self, x):
+        x = x.flatten(start_dim=1)
         x = self.fc1(x)
         x = F.sigmoid(x)
         x = self.fc2(x)
