@@ -2,156 +2,120 @@ import logging
 import copy
 import torch
 import wandb
+import math
 
 
 def train_and_evaluate(
     id_str,
     model,
-    criterion,
+    loss_fn,
     optimizer,
     scheduler,
     train_loader,
     test_loader,
-    iterations,
+    n_epochs,
     device,
-    metric,
-    test_every=5,
-    require_argmax=False,
 ):
+    """
+    Updated version of the training for the VAE model.
+    No downstream metric for the vae, so we only log the loss.
+    """
     wandb.define_metric(f"{id_str}/epoch")
     wandb.define_metric(f"{id_str}/*", step_metric=f"{id_str}/epoch")
 
     model.train()
     model = model.to(device)
+
     best_model = None
-
-    # losses = 0
-    # count = 0
     epoch = 0
-    best_acc = 0.0
+    best_loss = math.inf
+    for epoch in range(1, n_epochs + 1):
+        loss_acc = 0.0
+        mse_acc, kld_acc = 0.0, 0.0
 
-    # y_preds = []
-    # y_trues = []
-
-    while epoch < iterations:
-        losses = 0
         count = 0
-
-        y_preds = []
-        y_trues = []
-
-        epoch += 1
         for data, target in train_loader:
-            y_trues.append(target)
-
-            # data loading for GPU
             data = data.to(device)
-            target = target.to(device)
 
             # forward pass
-            output = model(data)
-            if not require_argmax:
-                target = target.reshape(output.shape)
-            loss = criterion(output, target)
+            # TODO: do we pass the target with the data?
+            out, mu, logvar = model(data)
+            # need to extract the two term to be able to log both of them
+            mse_loss, kld_loss = loss_fn(out, data, mu, logvar)
+            loss = mse_loss + kld_loss
 
             # backward pass
             loss.backward()
-
-            # gradient step
             optimizer.step()
             optimizer.zero_grad()
 
-            if require_argmax:
-                y_preds.append(output.argmax(dim=1).detach().cpu())
-            else:
-                y_preds.append(output.detach().cpu())
+            # TODO: why is there a coeff here?
+            loss_acc += loss.item()  # * data.size(0)
+            mse_acc += mse_loss.item()
+            kld_acc += kld_loss.item()
 
-            losses += loss.item() * data.size(0)
             count += data.size(0)
 
         scheduler.step()
 
-        losses /= count
-        y_preds_np = torch.cat(y_preds).numpy()
-        y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
+        train_loss = loss_acc / count
+        train_mse = mse_acc / count
+        train_kld = kld_acc / count
 
-        y_trues_np = torch.cat(y_trues).numpy()
-        y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
-
-        acc = metric(y_trues_np, y_preds_np)
-
-        logging.info(f"Epoch {epoch} Train Loss {losses:.4f} Train Acc {acc:.4f}")
+        logging.info(
+            f"Epoch: {epoch}, train loss: {train_loss:.4f}, mse: {train_mse:.4f}, kld: {train_kld:.4f}"
+        )
         wandb.log(
             {
-                f"{id_str}/train_loss": losses,
-                f"{id_str}/train_acc": acc,
+                f"{id_str}/train_loss": train_loss,
+                f"{id_str}/train_mse": train_mse,
+                f"{id_str}/train_kld": train_kld,
                 f"{id_str}/epoch": epoch,
             }
         )
 
-        if epoch % test_every == 0:
-            test_loss, test_acc = evaluate(
-                model,
-                criterion,
-                test_loader,
-                device,
-                metric,
-                require_argmax=require_argmax,
-            )
-            if test_acc > best_acc:
-                best_acc = test_acc
-                # store the best model by making a copy
-                best_model = copy.deepcopy(model)
-            logging.info(
-                f"Epoch {epoch} Test Loss {test_loss:.4f} Test Acc {test_acc:.4f}"
-            )
-            wandb.log(
-                {
-                    f"{id_str}/test_loss": test_loss,
-                    f"{id_str}/test_acc": test_acc,
-                    f"{id_str}/epoch": epoch,
-                }
-            )
+        test_loss, test_mse, test_kld = evaluate(model, loss_fn, test_loader, device)
+        if test_loss < best_loss:
+            best_loss = test_loss
+            # store the best model by making a copy
+            best_model = copy.deepcopy(model)
 
-    return best_acc, best_model
+        logging.info(
+            f"Epoch: {epoch} test loss: {test_loss:.4f}, mse: {test_mse:.4f}, kld: {test_kld:.4f}"
+        )
+        wandb.log(
+            {
+                f"{id_str}/test_loss": test_loss,
+                f"{id_str}/test_mse": test_mse,
+                f"{id_str}/test_kld": test_kld,
+                f"{id_str}/epoch": epoch,
+            }
+        )
+
+    return best_loss, best_model
 
 
-def evaluate(model, criterion, test_loader, device, metric, require_argmax=True):
+def evaluate(model, loss_fn, test_loader, device):
     model.eval()
     model.to(device)
 
-    losses = 0
+    loss_acc = 0.0
+    mse_acc, kld_acc = 0.0, 0.0
     counts = 0
-    y_preds = []
-    y_trues = []
     with torch.no_grad():
         for data, target in test_loader:
-            y_trues.append(target)
-
+            # fwd pass
             data = data.to(device)
-            target = target.to(device)
+            out, mu, logvar = model(data)
+            mse_loss, kld_loss = loss_fn(out, data, mu, logvar)
+            loss = mse_loss + kld_loss
 
-            outputs = model(data)
-            if not require_argmax:
-                target = target.reshape(outputs.shape)
-
-            loss = criterion(outputs, target)
-            losses += loss.item() * data.size(0)
+            loss_acc += loss.item()  # * data.size(0)
+            mse_acc += mse_loss.item()
+            kld_acc += kld_loss.item()
             counts += data.size(0)
 
-            if require_argmax:
-                y_preds.append(torch.argmax(outputs, dim=1).detach().cpu())
-            else:
-                y_preds.append(outputs.detach().cpu())
-
-    losses /= counts
-
-    y_preds_np = torch.cat(y_preds).numpy()
-    y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
-
-    y_trues_np = torch.cat(y_trues).numpy()
-    y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
-
-    acc = metric(y_trues_np, y_preds_np)
-
-    return losses, acc
+    loss_acc /= counts
+    mse_acc /= counts
+    kld_acc /= counts
+    return loss_acc, mse_acc, kld_acc

@@ -74,63 +74,67 @@ def run_forward_linearagg(
     metric,
     require_argmax=False,
 ):
-    y_preds = []
-    y_trues = []
+    inputs = []
+    outputs = []
+
     loss = 0.0
     n_batches = len(testset)
     reshape_dim = 1 if not require_argmax else num_classes
 
     with torch.no_grad():
-        for X, y in testset:
-            X = torch.reshape(X, (-1, total_clients, reshape_dim))
-            X = torch.swapaxes(X, 1, 2)
-            X = X * weights
-            y_pred = torch.sum(X, dim=2) + bias
-            target = y.reshape(y_pred.shape) if not require_argmax else y
-            loss += criterion(y_pred, target).detach().cpu().item()
+        for X, y, _ in testset:
+            X = (X.T @ weights) + bias
+            y_pred = X.T
+
+            # target = y.reshape(y_pred.shape) if not require_argmax else y
+            loss += criterion(y_pred, y).detach().cpu().item()
             if require_argmax:
                 y_pred = y_pred.argmax(dim=1)
 
-            y_preds.append(y_pred.detach().cpu())
-            y_trues.append(y)
+            inputs.append(y)
+            outputs.append(y_pred.detach().cpu())
 
     lm_loss = loss / n_batches
 
-    y_preds_np = np.concatenate(y_preds)
-    y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
+    inputs = torch.cat(inputs)
+    outputs = torch.cat(outputs)
 
-    y_trues_np = np.concatenate(y_trues)
-    y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
-
-    lm_performance = metric(y_trues_np, y_preds_np)
-    return lm_loss, lm_performance
+    lm_performance = metric(inputs, outputs)
+    return lm_loss, lm_performance.item()
 
 
 def averaging(dataset, metric, total_clients, num_classes, require_argmax=False):
     y_preds = []
     y_trues = []
 
-    for X, y in dataset:
-        if require_argmax:
-            # X: (batch_size, total_clients * num_classes)
-            X = torch.reshape(X, (-1, total_clients, num_classes))
-            y_pred = torch.mean(X, dim=1).argmax(dim=1)
-        else:
-            # X: (batch_size, total_clients)
-            X = torch.sigmoid(X)
-            y_pred = torch.mean(X, dim=1)
-            y_pred = torch.log(y_pred / (1 - y_pred))
+    # out from the model, target is the original X
+    inputs = []
+    outputs = []
+    for out, data, _ in dataset:
+        out = torch.mean(out, dim=0)
+        # if require_argmax:
+        #     # out: (batch_size, total_clients * num_classes)
+        #     out = torch.reshape(out, (-1, total_clients, num_classes))
+        #     out = torch.mean(out, dim=0).argmax(dim=1)
+        # else:
+        #     # out: (batch_size, total_clients)
+        #     out = torch.sigmoid(out)
+        #     out = torch.log(out / (1 - out))
 
-        y_preds.append(y_pred)
-        y_trues.append(y)
+        # y_preds.append(y_pred)
+        # y_trues.append(y)
+        inputs.append(data)
+        outputs.append(out)
 
-    y_preds_np = np.concatenate(y_preds)
-    y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
+    # y_preds_np = np.concatenate(y_preds)
+    # y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
 
-    y_trues_np = np.concatenate(y_trues)
-    y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
+    # y_trues_np = np.concatenate(y_trues)
+    # y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
+    inputs = torch.cat(inputs)
+    outputs = torch.cat(outputs)
 
-    avg_performance = metric(y_trues_np, y_preds_np)
+    avg_performance = metric(outputs, inputs).item()
     logging.info(f"==> Averaging Performance: {avg_performance:.4f}")
 
     return avg_performance
@@ -146,36 +150,41 @@ def weighted_averaging(
         my_labels_tensor / label_sum_tensor
     )  # (num_clients, num_classes)
 
-    y_preds = []
-    y_trues = []
-    for X, y in dataset:
-        if require_argmax:
-            # X: (batch_size, total_clients * num_classes)
-            X = torch.reshape(X, (-1, total_clients, num_classes))
-            X = X * my_weights_tensor
-            y_pred = torch.sum(X, dim=1).argmax(dim=1)
-        else:
-            # X: (batch_size, total_clients)
-            X = torch.sigmoid(X)
-            X_complement = 1 - X
-            X_all = torch.stack(
-                (X_complement, X), dim=2
-            )  # (batch_size, total_clients, 2)
-            X = X_all * my_weights_tensor  # (batch_size, total_clients, 2)
-            y_avg = torch.sum(X, dim=1)
-            y_avg = torch.softmax(y_avg, dim=1)
-            y_pred = torch.log(y_avg[:, 1] / y_avg[:, 0])
+    inputs = []
+    outputs = []
+    for out, data, labels in dataset:
+        local_weight = my_weights_tensor[:, labels.int()]
+        out = out * local_weight
+        out = torch.sum(out, dim=0)
+        # if require_argmax:
+        #     # out: (batch_size, total_clients * num_classes)
+        #     out = torch.reshape(out, (-1, total_clients, num_classes))
+        #     out = out * my_weights_tensor
+        #     y_pred = torch.sum(out, dim=1).argmax(dim=1)
+        # else:
+        #     # out: (batch_size, total_clients)
+        #     out = torch.sigmoid(out)
+        #     out_complement = 1 - out
+        #     out_all = torch.stack(
+        #         (out_complement, out), dim=2
+        #     )  # (batch_size, total_clients, 2)
+        #     out = out_all * my_weights_tensor  # (batch_size, total_clients, 2)
+        #     out = torch.sum(out, dim=1)
+        #     out = torch.softmax(out, dim=1)
+        #     out = torch.log(out[:, 1] / out[:, 0])
 
-        y_preds.append(y_pred)
-        y_trues.append(y)
+        inputs.append(data)
+        outputs.append(out)
 
-    y_preds_np = np.concatenate(y_preds)
-    y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
+    # y_preds_np = np.concatenate(y_preds)
+    # y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
 
-    y_trues_np = np.concatenate(y_trues)
-    y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
+    # y_trues_np = np.concatenate(y_trues)
+    # y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
+    inputs = torch.cat(inputs)
+    outputs = torch.cat(outputs)
 
-    wavg_performance = metric(y_trues_np, y_preds_np)
+    wavg_performance = metric(outputs, inputs).item()
     logging.info(f"==> Weighted Averaging Performance: {wavg_performance:.4f}")
 
     return wavg_performance
@@ -253,10 +262,10 @@ def linear_mapping(
     wandb.define_metric(f"{id_str}/epoch")
     wandb.define_metric(f"{id_str}/*", step_metric=f"{id_str}/epoch")
 
-    weights = torch.ones(total_clients, requires_grad=True, dtype=torch.float64)
-    logging.debug("Size of weights {}".format(weights.size()))
-    bias = torch.tensor([1.0], requires_grad=True, dtype=torch.float64)
-    logging.debug("Size of bias {}".format(bias.size()))
+    weights = torch.ones(total_clients, requires_grad=True, dtype=torch.float32)
+    logging.info("Size of weights: {}".format(weights.size()))
+    bias = torch.tensor([1.0], requires_grad=True, dtype=torch.float32)
+    logging.info("Size of bias: {}".format(bias.size()))
 
     lr = agg_params["lm_lr"]
     epochs = agg_params["lm_epochs"]
@@ -267,51 +276,50 @@ def linear_mapping(
 
     reshape_dim = 1 if not require_argmax else num_classes
 
-    y_preds = []
-    y_trues = []
-    best_acc = 0.0
-    for e in range(epochs):
+
+    best_acc = float("inf")
+    for epoch in range(epochs):
+        inputs = []
+        outputs = []
         epoch_loss = 0.0
 
-        for X, y in train_dataset:
+        # for out, y in train_dataset:
+        for out, data, _ in train_dataset:
             optimizer.zero_grad()
-            X = torch.reshape(X, (-1, total_clients, reshape_dim))
-            X = torch.swapaxes(X, 1, 2)
-            X = X * weights
-            y_pred = torch.sum(X, dim=2) + bias
-            target = y.reshape(y_pred.shape) if not require_argmax else y
-            loss = criterion(y_pred, target)
+            out = (out.T @ weights) + bias
+            out = out.T
+
+            # target = y.reshape(y_pred.shape) if not require_argmax else y
+            loss = criterion(out, data)
             loss.backward()
             optimizer.step()
+
             epoch_loss += loss.detach().cpu().item()
 
             if require_argmax:
                 y_pred = y_pred.argmax(dim=1)
 
-            y_preds.append(y_pred.detach().cpu())
-            y_trues.append(y)
+            inputs.append(data)
+            outputs.append(out.detach().cpu())
 
         avg_epoch_loss = epoch_loss / n_batches
 
-        y_preds_np = torch.cat(y_preds).numpy()
-        y_preds_np = y_preds_np.squeeze(-1) if y_preds_np.shape[-1] == 1 else y_preds_np
+        inputs = torch.cat(inputs)
+        outputs = torch.cat(outputs)
 
-        y_trues_np = torch.cat(y_trues).numpy()
-        y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
-
-        acc = metric(y_trues_np, y_preds_np)
+        train_performance = metric(inputs, outputs)
         logging.info(
-            f"Epoch {e + 1} Train Loss {avg_epoch_loss:.4f} Train Acc {acc:.4f}"
+            f"Epoch {epoch + 1}, train loss {avg_epoch_loss:.4f}, train mse {train_performance:.4f}"
         )
         wandb.log(
             {
                 f"{id_str}/train_loss": avg_epoch_loss,
-                f"{id_str}/train_acc": acc,
-                f"{id_str}/epoch": e + 1,
+                f"{id_str}/train_mse": train_performance,
+                f"{id_str}/epoch": epoch + 1,
             }
         )
 
-        if e % 10 == 0:
+        if epoch % 10 == 0:
             lm_loss, lm_performance = run_forward_linearagg(
                 weights,
                 bias,
@@ -323,16 +331,16 @@ def linear_mapping(
                 require_argmax,
             )
             logging.info(
-                f"Epoch {e + 1} Test Loss {lm_loss:.4f} Test Acc {lm_performance:.4f}"
+                f"Epoch {epoch + 1}, test loss {lm_loss:.4f}, test mse {lm_performance:.4f}"
             )
             wandb.log(
                 {
                     f"{id_str}/test_loss": lm_loss,
-                    f"{id_str}/test_acc": lm_performance,
-                    f"{id_str}/epoch": e + 1,
+                    f"{id_str}/test_mse": lm_performance,
+                    f"{id_str}/epoch": epoch + 1,
                 }
             )
-            if lm_performance > best_acc:
+            if lm_performance < best_acc:
                 logging.debug(
                     f"Improved performance from {best_acc:.4f} to {lm_performance:.4f}"
                 )
@@ -394,20 +402,24 @@ def evaluate_all_aggregations(
 
     # Create the dataset of predictions for training and testing
     trainset = []
+    # we select the X_hat predicted by each vae, as well as the input X
     with torch.no_grad():
         for elems, labels in train_loader:
             elems = elems.to(device)
-            outputs = [model(elems).detach().cpu() for model in models]
-            stacked_outputs = torch.hstack(outputs)
-            trainset.append((stacked_outputs, labels))
+            outputs = [model(elems)[0].detach().cpu() for model in models]
+            stacked_outputs = torch.stack(outputs)
+            elems = elems.cpu()
+            trainset.append((stacked_outputs, elems, labels))
 
     testset = []
+    # we select the X_hat predicted by each vae, as well as the input X
     with torch.no_grad():
         for elems, labels in test_loader:
             elems = elems.to(device)
-            outputs = [model(elems).detach().cpu() for model in models]
-            stacked_outputs = torch.hstack(outputs)
-            testset.append((stacked_outputs, labels))
+            outputs = [model(elems)[0].detach().cpu() for model in models]
+            stacked_outputs = torch.stack(outputs)
+            elems = elems.cpu()
+            testset.append((stacked_outputs, elems, labels))
 
     results = {}
 
@@ -421,17 +433,20 @@ def evaluate_all_aggregations(
     )
     results["wavg"] = wavg_performance
 
-    voting_performance = polychotomous_voting(
-        testset,
-        metric,
-        len(models),
-        len(label_dists[0]),
-        models,
-        device,
-        trainset,
-        require_argmax,
-    )
-    results["voting"] = voting_performance
+
+    # TODO: fix the next ones
+    if False:
+        voting_performance = polychotomous_voting(
+            testset,
+            metric,
+            len(models),
+            len(label_dists[0]),
+            models,
+            device,
+            trainset,
+            require_argmax,
+        )
+        results["voting"] = voting_performance
 
     lm_performance = linear_mapping(
         testset,
@@ -443,6 +458,7 @@ def evaluate_all_aggregations(
         require_argmax,
     )
     results["linear_mapping"] = lm_performance
+    return results
 
     nn_performance = nn_mapping(
         testset, metric, trainset, device, trainable_agg_params, require_argmax
