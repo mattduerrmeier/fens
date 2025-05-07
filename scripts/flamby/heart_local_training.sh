@@ -8,7 +8,7 @@ root_dir=$PWD
 env_python="$(which python)"
 
 gpu_idx=0
-seeds=(89 90 91)
+seeds=(89)
 dataset=FedHeartDisease
 
 # 90/10 split (D1 for training, D2 for aggr)
@@ -44,7 +44,8 @@ for seed in "${seeds[@]}"; do
         --nn_lr "$nn_lr" \
         --nn_epochs "$nn_epochs" \
         --epochs "$epochs" \
-        --disable_wandb
+        --wandb_project fens \
+        --wandb_entity niklas-radomski-unine
 
     end=$(date +%s)
     runtime=$((end - start))
