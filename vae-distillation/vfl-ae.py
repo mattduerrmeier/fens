@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import torch
@@ -132,7 +130,18 @@ def train_student(
     optimizer: torch.optim.Optimizer,
 ):
     batches = epoch_size // batch_size
-    loss_function = nn.MSELoss()
+
+    mse_loss = nn.MSELoss()
+
+    def adapted_loss(
+        actual_output: tuple[torch.Tensor, torch.Tensor],
+        expected_output: tuple[torch.Tensor, torch.Tensor],
+    ) -> torch.Tensor:
+        return mse_loss(actual_output[0], expected_output[0]) + 2 * mse_loss(
+            actual_output[1], expected_output[1].float()
+        )
+
+    loss_function = adapted_loss
 
     student_model.train()
     teacher_model.eval()
@@ -147,7 +156,7 @@ def train_student(
             teacher_output = teacher_model.sample_from_latent(latent)
             student_output = student_model.sample_from_latent(latent)
 
-            loss = loss_function(merge(student_output), merge(teacher_output))
+            loss = loss_function(student_output, teacher_output)
 
             loss.backward()
             optimizer.step()
@@ -176,6 +185,7 @@ class EvaluatorModel(nn.Module):
         x = self.act(self.fc2(x))
         x = self.act(self.fc3(x))
         x = self.dropout(x)
+
         return self.fc4(x)
 
 
@@ -195,6 +205,7 @@ def _run_evaluator_model(
 
     for epoch in range(1, 50):
         # train evaluator model
+        model.train()
         optimizer.zero_grad()
 
         outputs_train = model(features_train)
@@ -207,6 +218,7 @@ def _run_evaluator_model(
         train_accuracy = accuracy_score(targets_train, predictions_train)
 
         # test evaluator model
+        model.eval()
         outputs_test = model(features_test)
 
         predictions_test = torch.argmax(outputs_test, 1)
@@ -231,7 +243,7 @@ def _evaluate_decoder(
     model: Decoder | Autoencoder,
     training_set_size: int,
     dataset_test: Dataset[FeatureTargetEntry],
-    input_dimensions: int
+    input_dimensions: int,
 ):
     model.eval()
 
@@ -239,13 +251,14 @@ def _evaluate_decoder(
     synthetic_x, synthetic_y = model.sample_from_latent(latent)
 
     _run_evaluator_model(
-        TensorDataset(synthetic_x.detach(), synthetic_y.detach()), dataset_test,
-        input_dimensions=input_dimensions
+        TensorDataset(synthetic_x.detach(), synthetic_y.detach()),
+        dataset_test,
+        input_dimensions=input_dimensions,
     )
 
 
 def main():
-    dataset = FedHeartDataset(normalize=False)
+    dataset = FedHeartDataset(normalize=True)
 
     encoded_dataset = TensorDataset(*list(torch.tensor(it) for it in dataset.features))
 
@@ -277,7 +290,7 @@ def _main():
     for i in range(5):
         entry_features, entry_target = dataset_test[i]
         print(f"#{i}", entry_features)
-    
+
 
 def main(
     *,
@@ -298,27 +311,29 @@ def main(
 
     teacher_model = Autoencoder(
         input_dimensions=dataset_train_features_count + 1,
-        wide_hidden_dimensions=48,
-        narrow_hidden_dimensions=32,
-        latent_dimensions=16,
+        wide_hidden_dimensions=32,
+        narrow_hidden_dimensions=12,
+        latent_dimensions=8,
     )
 
     student_model = Decoder(
         output_dimensions=dataset_train_features_count + 1,
-        wide_hidden_dimensions=48,
-        narrow_hidden_dimensions=32,
-        latent_dimensions=16,
+        wide_hidden_dimensions=32,
+        narrow_hidden_dimensions=12,
+        latent_dimensions=8,
     )
 
     print("==============Baseline==============")
-    _run_evaluator_model(dataset_train, dataset_test, input_dimensions=dataset_train_features_count)
+    _run_evaluator_model(
+        dataset_train, dataset_test, input_dimensions=dataset_train_features_count
+    )
 
     print("==============Training teacher model==========")
     train_teacher(
         teacher_model,
         epochs=200,
         loader=DataLoader(dataset_train, batch_size=32),
-        optimizer=optim.Adam(teacher_model.parameters(), lr=1e-3)#, weight_decay=0.0001),
+        optimizer=optim.Adam(teacher_model.parameters(), lr=1e-3),
     )
 
     print("==============Evaluating teacher model==========")
@@ -335,8 +350,8 @@ def main(
         teacher_model=teacher_model,
         epochs=200,
         epoch_size=dataset_train_size,
-        batch_size=32,
-        optimizer=optim.Adam(student_model.parameters(), lr=1e-2),
+        batch_size=64,
+        optimizer=optim.Adam(student_model.parameters(), lr=1e-3),
     )
 
     print("==============Evaluating student model==========")
@@ -344,7 +359,7 @@ def main(
         model=student_model,
         training_set_size=len(dataset_train),
         dataset_test=dataset_test,
-        input_dimensions=dataset_train_features_count
+        input_dimensions=dataset_train_features_count,
     )
 
 
