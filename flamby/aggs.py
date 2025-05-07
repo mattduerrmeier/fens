@@ -82,17 +82,16 @@ def run_forward_linearagg(
     reshape_dim = 1 if not require_argmax else num_classes
 
     with torch.no_grad():
-        for X, y, _ in testset:
-            X = (X.T @ weights) + bias
-            y_pred = X.T
+        for out, data, labels in testset:
+            out = (out.T @ weights) + bias
+            out = out.T
 
             # target = y.reshape(y_pred.shape) if not require_argmax else y
-            loss += criterion(y_pred, y).detach().cpu().item()
-            if require_argmax:
-                y_pred = y_pred.argmax(dim=1)
+            loss = criterion(out, torch.concat((data, labels), dim=1))
 
-            inputs.append(y)
-            outputs.append(y_pred.detach().cpu())
+            inputs.append(torch.concat((data, labels), dim=1))
+            outputs.append(out.detach().cpu())
+
 
     lm_loss = loss / n_batches
 
@@ -110,7 +109,7 @@ def averaging(dataset, metric, total_clients, num_classes, require_argmax=False)
     # out from the model, target is the original X
     inputs = []
     outputs = []
-    for out, data, _ in dataset:
+    for out, data, label in dataset:
         out = torch.mean(out, dim=0)
         # if require_argmax:
         #     # out: (batch_size, total_clients * num_classes)
@@ -123,7 +122,7 @@ def averaging(dataset, metric, total_clients, num_classes, require_argmax=False)
 
         # y_preds.append(y_pred)
         # y_trues.append(y)
-        inputs.append(data)
+        inputs.append(torch.concat((data, label), dim=1))
         outputs.append(out)
 
     # y_preds_np = np.concatenate(y_preds)
@@ -133,6 +132,9 @@ def averaging(dataset, metric, total_clients, num_classes, require_argmax=False)
     # y_trues_np = y_trues_np.squeeze(-1) if y_trues_np.shape[-1] == 1 else y_trues_np
     inputs = torch.cat(inputs)
     outputs = torch.cat(outputs)
+
+    print("inputs", inputs.shape)
+    print("outputs", outputs.shape)
 
     avg_performance = metric(outputs, inputs).item()
     logging.info(f"==> Averaging Performance: {avg_performance:.4f}")
@@ -173,7 +175,7 @@ def weighted_averaging(
         #     out = torch.softmax(out, dim=1)
         #     out = torch.log(out[:, 1] / out[:, 0])
 
-        inputs.append(data)
+        inputs.append(torch.concat((data, labels), dim=1))
         outputs.append(out)
 
     # y_preds_np = np.concatenate(y_preds)
@@ -284,13 +286,13 @@ def linear_mapping(
         epoch_loss = 0.0
 
         # for out, y in train_dataset:
-        for out, data, _ in train_dataset:
+        for out, data, labels in train_dataset:
             optimizer.zero_grad()
             out = (out.T @ weights) + bias
             out = out.T
 
             # target = y.reshape(y_pred.shape) if not require_argmax else y
-            loss = criterion(out, data)
+            loss = criterion(out, torch.concat((data, labels.unsqueeze(dim=1)), dim=1))
             loss.backward()
             optimizer.step()
 
@@ -299,7 +301,7 @@ def linear_mapping(
             if require_argmax:
                 y_pred = y_pred.argmax(dim=1)
 
-            inputs.append(data)
+            inputs.append(torch.concat((data, labels.unsqueeze(dim=1)), dim=1))
             outputs.append(out.detach().cpu())
 
         avg_epoch_loss = epoch_loss / n_batches
@@ -406,7 +408,9 @@ def evaluate_all_aggregations(
     with torch.no_grad():
         for elems, labels in train_loader:
             elems = elems.to(device)
-            outputs = [model(elems)[0].detach().cpu() for model in models]
+            unsqueezed_labels = labels.unsqueeze(dim=1).to(device)
+
+            outputs = [model((elems, unsqueezed_labels))[0].detach().cpu() for model in models]
             stacked_outputs = torch.stack(outputs)
             elems = elems.cpu()
             trainset.append((stacked_outputs, elems, labels))
@@ -416,7 +420,9 @@ def evaluate_all_aggregations(
     with torch.no_grad():
         for elems, labels in test_loader:
             elems = elems.to(device)
-            outputs = [model(elems)[0].detach().cpu() for model in models]
+            unsqueezed_labels = labels.to(device)
+
+            outputs = [model((elems, unsqueezed_labels))[0].detach().cpu() for model in models]
             stacked_outputs = torch.stack(outputs)
             elems = elems.cpu()
             testset.append((stacked_outputs, elems, labels))

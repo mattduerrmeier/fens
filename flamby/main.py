@@ -9,7 +9,8 @@ import sys
 from utils import load_trainset_combined, generate_logits_combined
 from train import train_and_evaluate, evaluate
 from aggs import evaluate_all_aggregations
-from vae import VAE, KDLoss
+from vae import VAE
+from autoencoder.model import Autoencoder, MseKldLoss
 
 
 def get_parameters(dataset):
@@ -70,7 +71,7 @@ def get_parameters(dataset):
         raise ValueError(f"Unknown dataset: {dataset}")
 
     params = {
-        "batch_size": BATCH_SIZE,
+        "batch_size": 32,
         "lr": LR,
         "num_epochs": NUM_EPOCHS_POOLED,
         "num_clients": NUM_CLIENTS,
@@ -152,7 +153,7 @@ def run(args, device):
         torch.manual_seed(args.seed + i)
 
         D_in = len(train_dataset[0][0])
-        model = VAE(D_in)
+        model = Autoencoder(D_in + 1)
 
         if args.use_trained_models:
             logging.info(f"Loading trained model {i}")
@@ -160,7 +161,7 @@ def run(args, device):
                 torch.load(os.path.join(args.trained_models_path, f"{i}_final.pth"))
             )
         else:
-            loss_fn = KDLoss()
+            loss_fn = MseKldLoss()
             optimizer = params["optimizer"](model.parameters(), lr=params["lr"])
 
             # Constant learning rate scheduler
@@ -199,7 +200,7 @@ def run(args, device):
             id_str = f"client_{i}"
             logging.info(f"[Evaluating client {i}]")
 
-            loss_fn = KDLoss()
+            loss_fn = MseKldLoss()
             test_loss, _, _ = evaluate(
                 trained_models[i],
                 loss_fn,

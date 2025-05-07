@@ -33,15 +33,17 @@ def train_and_evaluate(
         loss_acc = 0.0
         mse_acc, kld_acc = 0.0, 0.0
 
-        count = 0
         for data, target in train_loader:
             data = data.to(device)
+            target = target.unsqueeze(dim=1).to(device)
 
             # forward pass
             # TODO: do we pass the target with the data?
-            out, mu, logvar = model(data)
+            out, mu, logvar = model((data, target))
             # need to extract the two term to be able to log both of them
-            mse_loss, kld_loss = loss_fn(out, data, mu, logvar)
+
+            concatenated_input = torch.concat((data, target), dim=1)
+            mse_loss, kld_loss = loss_fn(out, concatenated_input, mu, logvar)
             loss = mse_loss + kld_loss
 
             # backward pass
@@ -54,13 +56,11 @@ def train_and_evaluate(
             mse_acc += mse_loss.item()
             kld_acc += kld_loss.item()
 
-            count += data.size(0)
-
         scheduler.step()
 
-        train_loss = loss_acc / count
-        train_mse = mse_acc / count
-        train_kld = kld_acc / count
+        train_loss = loss_acc / len(train_loader)
+        train_mse = mse_acc / len(train_loader)
+        train_kld = kld_acc / len(train_loader)
 
         logging.info(
             f"Epoch: {epoch}, train loss: {train_loss:.4f}, mse: {train_mse:.4f}, kld: {train_kld:.4f}"
@@ -106,8 +106,11 @@ def evaluate(model, loss_fn, test_loader, device):
         for data, target in test_loader:
             # fwd pass
             data = data.to(device)
-            out, mu, logvar = model(data)
-            mse_loss, kld_loss = loss_fn(out, data, mu, logvar)
+            out, mu, logvar = model((data, target))
+
+            concatenated_input = torch.concat((data, target), dim=1)
+            mse_loss, kld_loss = loss_fn(out, concatenated_input, mu, logvar)
+
             loss = mse_loss + kld_loss
 
             loss_acc += loss.item()  # * data.size(0)
