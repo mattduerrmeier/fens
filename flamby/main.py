@@ -7,7 +7,7 @@ import pandas as pd
 import sys
 
 from utils import load_trainset_combined, generate_logits_combined
-from train import train_and_evaluate, evaluate
+from train import train_and_evaluate, evaluate, evaluate_downstream_task
 from aggs import evaluate_all_aggregations
 from vae import VAE
 from autoencoder.model import Autoencoder, MseKldLoss
@@ -87,6 +87,13 @@ def get_parameters(dataset):
     }
 
     return params
+
+
+def _sample_proxy_dataset(model: Autoencoder, samples: int):
+    latent = model.sample_latent(samples)
+    synthetic_x, synthetic_y = model.sample_from_latent(latent)
+
+    return torch.utils.data.TensorDataset(synthetic_x.detach(), synthetic_y.detach())
 
 
 def run(args, device):
@@ -181,8 +188,17 @@ def run(args, device):
                 device,
             )
             logging.info(f"Best loss: {best_loss:.4f}")
-
             model = best_model
+
+            model_proxy_dataset = _sample_proxy_dataset(best_model, 10_000)
+            evaluate_downstream_task(
+                id_str,
+                torch.utils.data.DataLoader(
+                    model_proxy_dataset, batch_size=test_dataloader.batch_size
+                ),
+                test_dataloader,
+            )
+
             if args.save_model:
                 torch.save(
                     model.state_dict(), os.path.join(args.result_dir, f"{i}_final.pth")
@@ -226,7 +242,6 @@ def run(args, device):
         #     params["collate_fn"],
         # )
         #
-
 
     proxy_dataloader = torch.utils.data.DataLoader(
         proxy_datasets,
