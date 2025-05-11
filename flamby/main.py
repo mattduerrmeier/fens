@@ -144,7 +144,6 @@ def run(args, device):
             train_dataset,
             batch_size=params["batch_size"],
             shuffle=True,
-            num_workers=1,
             collate_fn=params["collate_fn"],
         )
         proxy_datasets.extend(proxy_dataset)
