@@ -1,8 +1,13 @@
 import torch
 import numpy as np
 import logging
-from train import train_and_evaluate, train_and_evaluate_aggs
+
+from train import (
+    train_and_evaluate_aggs,
+    evaluate_downstream_task,
+)
 import wandb
+from autoencoder.model import Autoencoder, Decoder
 
 
 def evaluate_competencies(i, dataset, total_clients, num_classes, require_argmax=False):
@@ -91,7 +96,6 @@ def run_forward_linearagg(
 
             inputs.append(data)
             outputs.append(out.detach().cpu())
-
 
     lm_loss = loss / n_batches
 
@@ -268,7 +272,6 @@ def linear_mapping(
 
     reshape_dim = 1 if not require_argmax else num_classes
 
-
     best_acc = float("inf")
     for epoch in range(epochs):
         inputs = []
@@ -345,7 +348,7 @@ def linear_mapping(
 
 def nn_mapping(
     dataset, metric, train_dataset, device, agg_params, require_argmax=False
-):
+) -> tuple[float, torch.nn.Module]:
     id_str = "nn_agg"
     f = agg_params["nn_model"]()
     loss = agg_params["criterion"]
@@ -354,7 +357,7 @@ def nn_mapping(
     optimizer = torch.optim.Adam(f.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.999)
 
-    nn_performance, _ = train_and_evaluate_aggs(
+    nn_performance, best_model = train_and_evaluate_aggs(
         id_str,
         f,
         loss,
@@ -368,7 +371,56 @@ def nn_mapping(
 
     logging.info(f"==> Best NN Performance: {nn_performance}")
 
-    return nn_performance
+    # TODO: Replace with value for actual metric (and not loss, as here)
+    return nn_performance, best_model
+
+
+def _determine_ensemble_proxy_dataset(
+    models: list[torch.nn.Module],
+    loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
+    device: torch.device,
+) -> list[tuple[torch.Tensor, torch.Tensor]]:
+    proxy_dataset = []
+    # we select the X_hat predicted by each vae, as well as the input X
+    with torch.no_grad():
+        for elems, labels in loader:
+            if len(labels.shape) == 1:
+                labels = labels.unsqueeze(dim=1).to(device)
+
+            assert len(labels.shape) == 2
+
+            elems = elems.to(device)
+            labels = labels.to(device)
+
+            outputs: list[torch.Tensor] = []
+            for model in models:
+                model_output, _latent_mean, _latent_variance = model((elems, labels))
+
+                outputs.append(model_output.detach().cpu())
+
+            stacked_outputs = torch.stack(outputs)
+
+            elems = elems.cpu()
+            data = torch.concat((elems, labels), dim=1)
+
+            proxy_dataset.append((stacked_outputs, data))
+
+    return proxy_dataset
+
+
+def _sample_proxy_dataset(
+    models: list[Autoencoder | Decoder],
+    samples: int,
+) -> torch.Tensor:
+    outputs: list[torch.Tensor] = []
+
+    for model in models:
+        latent = model.sample_latent(samples)
+        synthetic_x, synthetic_y = model.sample_from_latent(latent)
+
+        outputs.append(torch.cat((synthetic_x.detach(), synthetic_y.detach()), dim=1))
+
+    return torch.stack(outputs)
 
 
 def evaluate_all_aggregations(
@@ -390,46 +442,33 @@ def evaluate_all_aggregations(
         model = model.to(device)
 
     # Create the dataset of predictions for training and testing
-    trainset = []
-    # we select the X_hat predicted by each vae, as well as the input X
-    with torch.no_grad():
-        for elems, labels in train_loader:
-            elems = elems.to(device)
-            unsqueezed_labels = labels.unsqueeze(dim=1).to(device)
+    trainset = _determine_ensemble_proxy_dataset(
+        models=models, loader=train_loader, device=device
+    )
 
-            outputs = [model((elems, unsqueezed_labels))[0].detach().cpu() for model in models]
-            stacked_outputs = torch.stack(outputs)
-
-            elems = elems.cpu()
-            data = torch.concat((elems, labels.unsqueeze(dim=1)), dim=1)
-
-            trainset.append((stacked_outputs, data))
-
-    testset = []
-    # we select the X_hat predicted by each vae, as well as the input X
-    with torch.no_grad():
-        for elems, labels in test_loader:
-            elems = elems.to(device)
-            unsqueezed_labels = labels.to(device)
-
-            outputs = [model((elems, unsqueezed_labels))[0].detach().cpu() for model in models]
-            stacked_outputs = torch.stack(outputs)
-
-            elems = elems.cpu()
-            data = torch.concat((elems, labels), dim=1)
-
-            testset.append((stacked_outputs, data))
+    testset = _determine_ensemble_proxy_dataset(
+        models=models, loader=test_loader, device=device
+    )
 
     results = {}
 
     avg_performance = averaging(
         testset, metric, len(models), len(label_dists[0]), require_argmax
     )
-    results["avg"] = avg_performance
+    results["avg"] = {
+        "mse_loss": avg_performance,
+        "downstream_train_accuracy": -1,
+        "downstream_test_accuracy": -1,
+    }
 
     if False:
         wavg_performance = weighted_averaging(
-            testset, metric, len(models), len(label_dists[0]), label_dists, require_argmax
+            testset,
+            metric,
+            len(models),
+            len(label_dists[0]),
+            label_dists,
+            require_argmax,
         )
         results["wavg"] = wavg_performance
 
@@ -455,12 +494,37 @@ def evaluate_all_aggregations(
         trainable_agg_params,
         require_argmax,
     )
-    results["linear_mapping"] = lm_performance
+    results["linear_mapping"] = {
+        "mse_loss": lm_performance,
+        "downstream_train_accuracy": -1,
+        "downstream_test_accuracy": -1,
+    }
 
-    nn_performance = nn_mapping(
+    nn_performance, best_model = nn_mapping(
         testset, metric, trainset, device, trainable_agg_params, require_argmax
     )
-    results["neural_network"] = nn_performance
+
+    proxy_dataset = _sample_proxy_dataset(models=models, samples=10_000)
+    proxy_dataset = proxy_dataset.swapaxes(0, 1)
+    downstream_dataset = best_model(proxy_dataset).detach()
+
+    nn_agg_train_accuracy, nn_agg_test_accuracy = evaluate_downstream_task(
+        "nn_agg",
+        torch.utils.data.DataLoader(
+            torch.utils.data.TensorDataset(
+                downstream_dataset[:, :-1],
+                downstream_dataset[:, -1].unsqueeze(dim=1).clip(0, 1).round(),
+            ),
+            batch_size=32,
+        ),
+        test_loader,
+    )
+
+    results["neural_network"] = {
+        "mse_loss": nn_performance,
+        "downstream_train_accuracy": nn_agg_train_accuracy,
+        "downstream_test_accuracy": nn_agg_test_accuracy,
+    }
 
     table = wandb.Table(columns=["Aggregation", "Performance"])
     for k, v in results.items():

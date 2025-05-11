@@ -284,7 +284,9 @@ def run(args, device):
         for client_id, acc in client_results.items():
             all_results.append((client_id, args.seed, acc))
 
-        client_df = pd.DataFrame(all_results, columns=["client_id", "seed", "test_loss"])
+        client_df = pd.DataFrame(
+            all_results, columns=["client_id", "seed", "test_loss"]
+        )
         client_df.to_csv(
             os.path.join(args.result_dir, "client_results.csv"), index=False
         )
@@ -296,9 +298,26 @@ def run(args, device):
     # save aggregation results
     all_results = []
     for agg, acc in agg_results.items():
-        all_results.append((agg, args.seed, acc))
+        all_results.append(
+            (
+                agg,
+                args.seed,
+                acc["mse_loss"],
+                acc["downstream_train_accuracy"],
+                acc["downstream_test_accuracy"],
+            )
+        )
 
-    agg_df = pd.DataFrame(all_results, columns=["agg", "seed", "mse_loss"])
+    agg_df = pd.DataFrame(
+        all_results,
+        columns=[
+            "agg",
+            "seed",
+            "mse_loss",
+            "downstream_train_accuracy",
+            "downstream_test_accuracy",
+        ],
+    )
     agg_df.to_csv(os.path.join(args.result_dir, "agg_results.csv"), index=False)
 
     logging.info("Saved successfully")
