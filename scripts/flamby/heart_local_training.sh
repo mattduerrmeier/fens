@@ -15,7 +15,7 @@ dataset=FedHeartDisease
 proxy_frac=0.1
 test_every=1
 # the number of epochs each model trains for; in the paper, says use the FLamby config
-epochs=30
+epochs=200
 
 # these 4 params are used in `evaluate_all_aggregations()` (aggs.py)
 # learning rate and number of epochs for the linear mapping and neural net mapping
