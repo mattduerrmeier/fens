@@ -19,9 +19,9 @@ class Autoencoder(nn.Module):
     def __init__(
         self,
         input_dimensions: int,
-        wide_hidden_dimensions: int = 50,
-        narrow_hidden_dimensions: int = 12,
-        latent_dimensions: int = 3,
+        wide_hidden_dimensions: int = 32,
+        narrow_hidden_dimensions: int = 16,
+        latent_dimensions: int = 8,
     ):
         super(Autoencoder, self).__init__()
 
