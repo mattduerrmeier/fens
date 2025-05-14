@@ -17,7 +17,7 @@ def run_and_evaluate(
             proxy_dataset_tensor.flatten(end_dim=1)[:, :-1],
             proxy_dataset_tensor.flatten(end_dim=1)[:, -1:],
         ),
-        epochs=200,
+        epochs=50,
         batch_size=64,
         device=device,
     )
