@@ -4,12 +4,10 @@ import os
 import logging
 import wandb
 import pandas as pd
-import sys
 
-from utils import load_trainset_combined, generate_logits_combined
+from utils import prepare_client_datasets, determine_label_distribution, load_dataset
 from train import train_and_evaluate, evaluate, evaluate_downstream_task
 from aggs import evaluate_all_aggregations
-from vae import VAE
 from autoencoder.model import Autoencoder, MseKldLoss
 from mnist_dataset import MNISTDataset
 
@@ -31,6 +29,7 @@ def get_parameters(dataset):
         from loss import BaselineLoss_FHD as BaselineLoss
 
         NUM_CLASSES = 2
+        NUM_CLIENTS = 3
         require_argmax = False
         from models import SmallNN_FHD as SmallNN
     elif dataset == "FedCamelyon16":
@@ -127,43 +126,54 @@ def run(args, device):
     )
 
     params = get_parameters(args.dataset)
-    FedDataset = params["fed_dataset"]
 
     if args.epochs != -1:
         params["num_epochs"] = args.epochs
 
-    # create test dataset
-    testset = FedDataset(train=False, pooled=True)
+    # load dataset
+    num_clients = params["num_clients"]
+    dataset_class = params["fed_dataset"]
+
+    dataset = load_dataset(dataset_class)
+    label_distribution: list[int] = determine_label_distribution(dataset)
+    print("Training on dataset with overall label distribution of: ", label_distribution)
+
+    client_datasets, test_dataset = prepare_client_datasets(
+        dataset=dataset,
+        train_test_split=0.8,
+        num_clients=num_clients,
+    )
+
     test_dataloader = torch.utils.data.DataLoader(
-        testset,
+        test_dataset,
         batch_size=params["batch_size"],
         shuffle=False,
         num_workers=0,
         collate_fn=params["collate_fn"],
     )
 
-    trained_models = []
-    proxy_datasets = []
-    label_dists = []
+    trained_models: list[Autoencoder] = []
+    proxy_datasets: list[torch.utils.data.Dataset] = []
 
     if not os.path.exists(args.result_dir):
         os.makedirs(args.result_dir)
 
     ### 1. train each client's VAE
-    for i in range(params["num_clients"]):
-        print(f"Training VAE {i + 1}/{params['num_clients']}")
-        id_str = f"client_{i}"
-        logging.info(f"[Training client {i}]")
+    for client_idx, client_dataset in zip(range(num_clients), client_datasets):
+        print(f"Training VAE {client_idx + 1}/{params['num_clients']}")
+        id_str = f"client_{client_idx}"
+        logging.info(f"[Training client {client_idx}]")
 
-        train_dataset, proxy_dataset, label_dist = load_trainset_combined(
-            args.dataset,
-            i,
-            FedDataset,
-            params["num_classes"],
-            proxy_frac=args.proxy_frac,
-            seed=args.seed,
+        proxy_fraction: float = args.proxy_frac
+
+        train_dataset, proxy_dataset = torch.utils.data.random_split(
+            client_dataset, (1 - proxy_fraction, proxy_fraction)
         )
-        print(f"VAE trains on {len(train_dataset)} records with label distribution {label_dist}")
+
+        client_label_distribution = determine_label_distribution(train_dataset)
+        print(
+            f"VAE trains on {len(train_dataset)} records with label distribution {client_label_distribution}"
+        )
 
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
@@ -171,18 +181,19 @@ def run(args, device):
             shuffle=True,
             collate_fn=params["collate_fn"],
         )
-        proxy_datasets.extend(proxy_dataset)
-        label_dists.append(label_dist)
+        proxy_datasets.append(proxy_dataset)
 
-        torch.manual_seed(args.seed + i)
+        torch.manual_seed(args.seed + client_idx)
 
         D_in = len(train_dataset[0][0])
         model = Autoencoder(D_in + 1)
 
         if args.use_trained_models:
-            logging.info(f"Loading trained model {i}")
+            logging.info(f"Loading trained model {client_idx}")
             model.load_state_dict(
-                torch.load(os.path.join(args.trained_models_path, f"{i}_final.pth"))
+                torch.load(
+                    os.path.join(args.trained_models_path, f"{client_idx}_final.pth")
+                )
             )
         else:
             loss_fn = MseKldLoss()
@@ -220,7 +231,8 @@ def run(args, device):
 
             if args.save_model:
                 torch.save(
-                    model.state_dict(), os.path.join(args.result_dir, f"{i}_final.pth")
+                    model.state_dict(),
+                    os.path.join(args.result_dir, f"{client_idx}_final.pth"),
                 )
 
         # Add trained model to the list
@@ -229,14 +241,14 @@ def run(args, device):
     # evaluation of the VAE
     if not args.use_trained_models:
         client_results = {}
-        for i in range(params["num_clients"]):
-            print(f"Evaluating VAE {i + 1}/{params['num_clients']}")
-            id_str = f"client_{i}"
-            logging.info(f"[Evaluating client {i}]")
+        for client_idx in range(params["num_clients"]):
+            print(f"Evaluating VAE {client_idx + 1}/{params['num_clients']}")
+            id_str = f"client_{client_idx}"
+            logging.info(f"[Evaluating client {client_idx}]")
 
             loss_fn = MseKldLoss()
             test_loss, _, _ = evaluate(
-                trained_models[i],
+                trained_models[client_idx],
                 loss_fn,
                 test_dataloader,
                 device,
@@ -263,7 +275,7 @@ def run(args, device):
         #
 
     proxy_dataloader = torch.utils.data.DataLoader(
-        proxy_datasets,
+        torch.utils.data.ConcatDataset(proxy_datasets),
         batch_size=params["batch_size"],
         shuffle=True,
         num_workers=0,
@@ -283,11 +295,12 @@ def run(args, device):
         "criterion": mse_metric,
     }
 
+    num_labels = len(label_distribution)
     agg_results = evaluate_all_aggregations(
         proxy_dataloader,
         test_dataloader,
         trained_models,
-        label_dists,
+        num_labels,
         mse_metric,
         device,
         trainable_agg_params,

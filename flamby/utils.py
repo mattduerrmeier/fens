@@ -2,6 +2,7 @@ import torch
 from tqdm import tqdm
 import numpy as np
 import logging
+import typing
 
 
 # create a dummy object with two fields: dataset and totalclients
@@ -77,10 +78,73 @@ def load_trainset_fedcam16(client_id, FedDataset, num_classes, proxy_frac=0.1, s
     return all_trainset, all_proxyset, label_distribution
 
 
+def load_dataset(
+    dataset_class: typing.Any,
+) -> torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]]:
+    return torch.utils.data.ConcatDataset(
+        (
+            dataset_class(train=True, pooled=True),
+            dataset_class(train=False, pooled=True),
+        )
+    )
+
+
+class PreparedDatasets(typing.NamedTuple):
+    client_datasets: typing.Sequence[
+        torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]]
+    ]
+    test_dataset: torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]]
+
+
+def prepare_client_datasets(
+    dataset: torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]],
+    train_test_split: float,
+    num_clients: int,
+    seed: int = 90,
+) -> PreparedDatasets:
+    generator = torch.Generator().manual_seed(seed)
+
+    dataset_train, dataset_test = torch.utils.data.random_split(
+        dataset, lengths=(train_test_split, 1 - train_test_split), generator=generator
+    )
+
+    client_datasets = torch.utils.data.random_split(
+        dataset_train,
+        lengths=tuple(1 / num_clients for _ in range(num_clients)),
+        generator=generator,
+    )
+
+    return PreparedDatasets(client_datasets=client_datasets, test_dataset=dataset_test)
+
+
+def determine_label_distribution(
+    dataset: torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]],
+) -> typing.Sequence[int]:
+    loader = torch.utils.data.DataLoader(dataset, batch_size=1024, shuffle=False)
+
+    labels: dict[tuple[typing.Any], int] = {}
+    for _batch_features, batch_labels in loader:
+        batch_unique_values, batch_counts = typing.cast(torch.Tensor, batch_labels).unique(return_counts=True)
+        
+        for unique_value, count in zip(batch_unique_values, batch_counts):
+            try:
+                key = tuple(unique_value.tolist())
+            except TypeError:
+                key = unique_value.item()
+
+            labels[key] = labels.get(key, 0) + count.item()
+
+    return list(labels.values())
+
 def load_trainset_combined(
-    dataset_name, client_id, FedDataset, num_classes, proxy_frac=0.1, seed=90
+    dataset_name: str,
+    client_id: int,
+    dataset_class,
+    num_classes: int,
+    proxy_frac: float = 0.1,
+    seed: int = 90,
 ):
-    trainset = FedDataset(center=client_id, train=True, pooled=False)
+    trainset = dataset_class(center=client_id, train=True, pooled=False)
 
     t = len(trainset)
     i = 0

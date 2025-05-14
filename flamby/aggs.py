@@ -45,7 +45,7 @@ def evaluate_all_aggregations(
     train_loader,
     test_loader,
     models,
-    label_dists,
+    num_labels,
     metric,
     device,
     trainable_agg_params,
@@ -71,7 +71,7 @@ def evaluate_all_aggregations(
     results = {}
 
     avg_performance = averaging(
-        testset, metric, len(models), len(label_dists[0]), require_argmax
+        testset, metric, len(models), num_labels, require_argmax
     )
     results["avg"] = {
         "mse_loss": avg_performance,
@@ -84,8 +84,8 @@ def evaluate_all_aggregations(
             testset,
             metric,
             len(models),
-            len(label_dists[0]),
-            label_dists,
+            len(num_labels[0]),
+            num_labels,
             require_argmax,
         )
         results["wavg"] = wavg_performance
@@ -95,7 +95,7 @@ def evaluate_all_aggregations(
             testset,
             metric,
             len(models),
-            len(label_dists[0]),
+            num_labels,
             models,
             device,
             trainset,
@@ -107,7 +107,7 @@ def evaluate_all_aggregations(
         testset,
         metric,
         len(models),
-        len(label_dists[0]),
+        num_labels,
         trainset,
         trainable_agg_params,
         require_argmax,

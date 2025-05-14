@@ -136,7 +136,7 @@ def train_and_evaluate(
         model.train()
         for data, target in train_loader:
             data = data.to(device)
-            target = target.unsqueeze(dim=1).to(device)
+            target = target.to(device)
 
             optimizer.zero_grad()
 

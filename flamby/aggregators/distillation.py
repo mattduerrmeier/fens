@@ -55,9 +55,10 @@ def train_student(
         actual_output: tuple[torch.Tensor, torch.Tensor],
         expected_output: tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
-        return mse_loss(actual_output[0], expected_output[0]) + 2 * mse_loss(
+        return mse_loss(actual_output[0], expected_output[0]) +  mse_loss(
             actual_output[1], expected_output[1].float()
         )
+
 
     loss_function = adapted_loss
 
