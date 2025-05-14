@@ -11,6 +11,7 @@ from aggregators.neural import (
 from aggregators.neural import nn_mapping
 from autoencoder.model import Autoencoder, Decoder
 from train import evaluate_downstream_task
+from typing import Union
 
 import wandb
 
@@ -41,6 +42,7 @@ def _determine_ensemble_proxy_dataset(
             stacked_outputs = torch.stack(outputs)
 
             elems = elems.cpu()
+            labels = labels.cpu()
             data = torch.concat((elems, labels), dim=1)
 
             proxy_dataset.append((stacked_outputs, data))
@@ -49,14 +51,16 @@ def _determine_ensemble_proxy_dataset(
 
 
 def _sample_proxy_dataset(
-    models: list[Autoencoder | Decoder],
+    models: list[Union[Autoencoder, Decoder]],
     samples: int,
+    device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     latents: list[torch.Tensor] = []
     outputs: list[torch.Tensor] = []
 
     for model in models:
         latent = model.sample_latent(samples)
+        latent = latent.to(device)
         synthetic_x, synthetic_y = model.sample_from_latent(latent)
 
         latents.append(latent)
@@ -150,10 +154,10 @@ def evaluate_all_aggregations(
         testset, metric, trainset, device, trainable_agg_params, require_argmax
     )
 
-    proxy_latents, proxy_dataset = _sample_proxy_dataset(models=models, samples=1_000)
+    proxy_latents, proxy_dataset = _sample_proxy_dataset(models=models, samples=1_000, device=device)
 
     nn_agg_train_accuracy, nn_agg_test_accuracy = evaluate_neural_on_downstream_task(
-        best_model, proxy_dataset, test_loader
+        best_model, proxy_dataset, test_loader, device
     )
 
     results["neural_network"] = {
@@ -174,10 +178,11 @@ def evaluate_all_aggregations(
         epochs=200,
         batch_size=64,
         optimizer=torch.optim.Adam(student_model.parameters(), lr=1e-3),
+        device=device,
     )
 
-    _, downstream_proxy_data = _sample_proxy_dataset([best_student_model], 1000)
-    evaluate_distillation_on_downstream_task(downstream_proxy_data, test_loader)
+    _, downstream_proxy_data = _sample_proxy_dataset([best_student_model], 1000, device)
+    evaluate_distillation_on_downstream_task(downstream_proxy_data, test_loader, device)
 
     table = wandb.Table(columns=["Aggregation", "Performance"])
     for k, v in results.items():

@@ -9,20 +9,20 @@ env_python="$(which python)"
 
 gpu_idx=0
 seeds=(89)
-dataset=FedHeartDisease
+dataset=MNIST
 
 # 90/10 split (D1 for training, D2 for aggr)
 proxy_frac=0.1
 test_every=1
 # the number of epochs each model trains for; in the paper, says use the FLamby config
-epochs=10
+epochs=200
 
 # these 4 params are used in `evaluate_all_aggregations()` (aggs.py)
 # learning rate and number of epochs for the linear mapping and neural net mapping
 lm_lr=1e-3
-lm_epochs=10
+lm_epochs=300
 nn_lr=5e-5
-nn_epochs=10
+nn_epochs=200
 
 for seed in "${seeds[@]}"; do
     save_dir="flamby/local_training/${dataset}_${seed}_epochs${epochs}"

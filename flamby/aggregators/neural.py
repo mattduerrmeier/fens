@@ -37,6 +37,7 @@ def evaluate_on_downstream_task(
     model: torch.nn.Module,
     proxy_dataset: torch.Tensor,
     test_loader: torch.utils.data.DataLoader,
+    device: torch.device,
 ) -> tuple[float, float]:
     proxy_dataset = proxy_dataset.swapaxes(0, 1)
     downstream_dataset = model(proxy_dataset).detach()
@@ -51,6 +52,7 @@ def evaluate_on_downstream_task(
             batch_size=32,
         ),
         test_loader,
+        device,
     )
 
     return nn_agg_train_accuracy, nn_agg_test_accuracy

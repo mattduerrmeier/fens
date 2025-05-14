@@ -208,6 +208,7 @@ def evaluate(model, loss_fn, test_loader, device):
         for data, target in test_loader:
             # fwd pass
             data = data.to(device)
+            target = target.to(device)
             out, mu, logvar = model((data, target))
 
             concatenated_input = torch.concat((data, target), dim=1)
@@ -257,6 +258,7 @@ def evaluate_downstream_task(
     id: str,
     loader_train: torch.utils.data.DataLoader,
     loader_test: torch.utils.data.DataLoader,
+    device: torch.device,
 ) -> tuple[float, float]:
     input_dimensions = _determine_dataset_feature_count(loader_train)
 
@@ -264,6 +266,7 @@ def evaluate_downstream_task(
     optimizer = torch.optim.AdamW(model.parameters())
 
     loss_function = torch.nn.CrossEntropyLoss()
+    model.to(device)
 
     def train() -> tuple[float, float]:
         model.train()
@@ -274,6 +277,7 @@ def evaluate_downstream_task(
 
         for features_train, targets_train in loader_train:
             targets_train = targets_train.squeeze(dim=1)
+            features_train, targets_train = features_train.to(device), targets_train.to(device)
 
             optimizer.zero_grad()
 
@@ -303,6 +307,7 @@ def evaluate_downstream_task(
 
         for features_test, targets_test in loader_test:
             targets_test = targets_test.squeeze(dim=1)
+            features_test, targets_test = features_test.to(device), targets_test.to(device)
 
             outputs_test = model(features_test)
 

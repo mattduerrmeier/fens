@@ -11,6 +11,7 @@ from train import train_and_evaluate, evaluate, evaluate_downstream_task
 from aggs import evaluate_all_aggregations
 from vae import VAE
 from autoencoder.model import Autoencoder, MseKldLoss
+from mnist_dataset import MNISTDataset
 
 
 def get_parameters(dataset):
@@ -67,6 +68,20 @@ def get_parameters(dataset):
         NUM_CLASSES = 8
         require_argmax = True
         from models import SmallNN_FISIC as SmallNN
+    elif dataset == "MNIST":
+        BATCH_SIZE = 32
+        LR = 1e-4
+        NUM_EPOCHS_POOLED = 10
+        NUM_CLIENTS = 4
+        Optimizer = torch.optim.Adam
+        collate_fn = None
+        Baseline = None
+        BaselineLoss = None
+        metric = accuracy
+        FedDataset = MNISTDataset
+
+        NUM_CLASSES = 10
+        require_argmax = False
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -89,8 +104,9 @@ def get_parameters(dataset):
     return params
 
 
-def _sample_proxy_dataset(model: Autoencoder, samples: int):
+def _sample_proxy_dataset(model: Autoencoder, samples: int, device):
     latent = model.sample_latent(samples)
+    latent = latent.to(device)
     synthetic_x, synthetic_y = model.sample_from_latent(latent)
 
     return torch.utils.data.TensorDataset(synthetic_x.detach(), synthetic_y.detach())
@@ -192,13 +208,14 @@ def run(args, device):
             logging.info(f"Best loss: {best_loss:.4f}")
             model = best_model
 
-            model_proxy_dataset = _sample_proxy_dataset(best_model, 10_000)
+            model_proxy_dataset = _sample_proxy_dataset(best_model, 10_000, device)
             evaluate_downstream_task(
                 id_str,
                 torch.utils.data.DataLoader(
                     model_proxy_dataset, batch_size=test_dataloader.batch_size
                 ),
                 test_dataloader,
+                device,
             )
 
             if args.save_model:
@@ -329,7 +346,8 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     gpu_idx = args.gpu_idx
-    device = torch.device(f"cuda:{gpu_idx}" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
+    # device = torch.device(f"cuda:{gpu_idx}" if torch.cuda.is_available() else "cpu")
 
     # extract name from args.result_dir
     run_name = os.path.basename(args.result_dir)

@@ -7,7 +7,7 @@ def parse_arguments():
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["FedHeartDisease", "FedCamelyon16", "FedISIC2019"],
+        choices=["FedHeartDisease", "FedCamelyon16", "FedISIC2019", "MNIST"],
         default="FedHeartDisease",
         help="Dataset",
     )

@@ -9,6 +9,7 @@ def train_student(
     epochs: int,
     batch_size: int,
     optimizer: torch.optim.Optimizer,
+    device: torch.device,
 ) -> torch.nn.Module:
     batches = len(proxy_dataset) // batch_size
 
@@ -30,6 +31,7 @@ def train_student(
         total_loss = 0
 
         for batch_latents, batch_features, batch_targets in torch.utils.data.DataLoader(proxy_dataset, batch_size=batch_size):
+            batch_latents = batch_latents.to(device)
             optimizer.zero_grad()
 
             teacher_output = (batch_features, batch_targets)
@@ -49,6 +51,7 @@ def train_student(
 def evaluate_on_downstream_task(
     downstream_dataset: torch.Tensor,
     test_loader: torch.utils.data.DataLoader,
+    device: torch.device,
 ) -> tuple[float, float]:
     downstream_dataset = downstream_dataset.flatten(end_dim=1)
 
@@ -62,6 +65,7 @@ def evaluate_on_downstream_task(
             batch_size=32,
         ),
         test_loader,
+        device,
     )
 
     return train_accuracy, test_accuracy
