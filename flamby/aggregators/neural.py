@@ -2,15 +2,18 @@ import logging
 import typing
 
 import torch
-from .common import AggregatorResult
 from train import evaluate_downstream_task, train_and_evaluate_aggs
+
+from .common import AggregatorResult
 
 
 def run_and_evaluate(
     agg_params: typing.Mapping[str, typing.Any],
     train_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
     test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
-    downstream_test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
+    downstream_test_loader: torch.utils.data.DataLoader[
+        tuple[torch.Tensor, torch.Tensor]
+    ],
     proxy_dataset_tensor: torch.Tensor,
     device: torch.device,
 ) -> AggregatorResult:

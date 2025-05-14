@@ -1,8 +1,8 @@
 import torch
-import typing
-from .common import sample_proxy_dataset, AggregatorResult
-from autoencoder.model import Autoencoder, Decoder
+from autoencoder.model import Decoder
 from train import evaluate_downstream_task
+
+from .common import AggregatorResult, sample_proxy_dataset
 
 
 def run_and_evaluate(

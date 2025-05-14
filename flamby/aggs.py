@@ -1,19 +1,7 @@
 import torch
-
-from aggregators import common, neural, distillation
-
+from aggregators import common, distillation, neural
 from aggregators.average import averaging
-from aggregators.distillation import train_student
-from aggregators.distillation import (
-    evaluate_on_downstream_task as evaluate_distillation_on_downstream_task,
-)
 from aggregators.linear import linear_mapping
-from aggregators.neural import (
-    evaluate_on_downstream_task as evaluate_neural_on_downstream_task,
-)
-from aggregators.neural import nn_mapping
-from autoencoder.model import Autoencoder, Decoder
-from train import evaluate_downstream_task
 
 import wandb
 
