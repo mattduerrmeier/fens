@@ -50,8 +50,10 @@ class MNISTDataset(Dataset):
         if pooled:
             self.data = dataset
         else:
-            list_splits = split(dataset, nr_clients=NUM_CENTERS, iid=True, seed=42)
-            center_split = list_splits[center]
+            if MNISTDataset.list_splits is None:
+                MNISTDataset.list_splits = split(dataset, nr_clients=NUM_CENTERS, iid=True, seed=42)
+
+            center_split = MNISTDataset.list_splits[center]
             self.data = center_split
 
     def __len__(self):
