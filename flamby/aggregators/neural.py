@@ -1,11 +1,40 @@
 import logging
+import typing
 
 import torch
+from .common import AggregatorResult
 from train import evaluate_downstream_task, train_and_evaluate_aggs
 
 
+def run_and_evaluate(
+    agg_params: typing.Mapping[str, typing.Any],
+    train_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
+    test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
+    downstream_test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
+    proxy_dataset_tensor: torch.Tensor,
+    device: torch.device,
+) -> AggregatorResult:
+    mse_loss, best_model = nn_mapping(
+        agg_params=agg_params,
+        train_dataset=train_loader,
+        dataset=test_loader,
+        metric=None,
+        device=device,
+    )
+
+    train_accuracy, test_accuracy = evaluate_on_downstream_task(
+        best_model, proxy_dataset_tensor, downstream_test_loader
+    )
+
+    return {
+        "mse_loss": mse_loss,
+        "downstream_train_accuracy": train_accuracy,
+        "downstream_test_accuracy": test_accuracy,
+    }
+
+
 def nn_mapping(
-    dataset, metric, train_dataset, device, agg_params, require_argmax=False
+    agg_params, train_dataset, dataset, metric, device
 ) -> tuple[float, torch.nn.Module]:
     id_str = "nn_agg"
     f = agg_params["nn_model"]()
@@ -41,7 +70,7 @@ def evaluate_on_downstream_task(
     proxy_dataset = proxy_dataset.swapaxes(0, 1)
     downstream_dataset = model(proxy_dataset).detach()
 
-    nn_agg_train_accuracy, nn_agg_test_accuracy = evaluate_downstream_task(
+    train_accuracy, test_accuracy = evaluate_downstream_task(
         "nn_agg",
         torch.utils.data.DataLoader(
             torch.utils.data.TensorDataset(
@@ -53,4 +82,4 @@ def evaluate_on_downstream_task(
         test_loader,
     )
 
-    return nn_agg_train_accuracy, nn_agg_test_accuracy
+    return train_accuracy, test_accuracy

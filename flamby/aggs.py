@@ -1,4 +1,7 @@
 import torch
+
+from aggregators import common, neural, distillation
+
 from aggregators.average import averaging
 from aggregators.distillation import train_student
 from aggregators.distillation import (
@@ -46,27 +49,6 @@ def _determine_ensemble_proxy_dataset(
             proxy_dataset.append((stacked_outputs, data))
 
     return proxy_dataset
-
-
-def _sample_proxy_dataset(
-    models: list[Autoencoder | Decoder],
-    samples: int,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    latents: list[torch.Tensor] = []
-    outputs: list[torch.Tensor] = []
-
-    for model in models:
-        latent = model.sample_latent(samples)
-        synthetic_x, synthetic_y = model.sample_from_latent(latent)
-
-        latents.append(latent)
-        outputs.append(
-            torch.cat(
-                (synthetic_x.detach(), synthetic_y.detach().clip(0, 1).round()), dim=1
-            )
-        )
-
-    return torch.stack(latents), torch.stack(outputs)
 
 
 def evaluate_all_aggregations(
@@ -146,38 +128,25 @@ def evaluate_all_aggregations(
         "downstream_test_accuracy": -1,
     }
 
-    nn_performance, best_model = nn_mapping(
-        testset, metric, trainset, device, trainable_agg_params, require_argmax
+    proxy_latents, proxy_dataset = common.sample_proxy_dataset(
+        models=models, samples=1_000
     )
 
-    proxy_latents, proxy_dataset = _sample_proxy_dataset(models=models, samples=1_000)
-
-    nn_agg_train_accuracy, nn_agg_test_accuracy = evaluate_neural_on_downstream_task(
-        best_model, proxy_dataset, test_loader
+    results["neural_network"] = neural.run_and_evaluate(
+        agg_params=trainable_agg_params,
+        train_loader=trainset,
+        test_loader=testset,
+        downstream_test_loader=test_loader,
+        proxy_dataset_tensor=proxy_dataset,
+        device=device,
     )
 
-    results["neural_network"] = {
-        "mse_loss": nn_performance,
-        "downstream_train_accuracy": nn_agg_train_accuracy,
-        "downstream_test_accuracy": nn_agg_test_accuracy,
-    }
-
-    # TODO: determine number of features dynamically
-    student_model = Decoder(output_dimensions=13 + 1)
-    best_student_model = train_student(
-        student_model=student_model,
-        proxy_dataset=torch.utils.data.TensorDataset(
-            proxy_latents.flatten(end_dim=1),
-            proxy_dataset.flatten(end_dim=1)[:, :-1],
-            proxy_dataset.flatten(end_dim=1)[:, -1:],
-        ),
-        epochs=200,
-        batch_size=64,
-        optimizer=torch.optim.Adam(student_model.parameters(), lr=1e-3),
+    results["distillation"] = distillation.run_and_evaluate(
+        test_loader=test_loader,
+        proxy_latents_tensor=proxy_latents,
+        proxy_dataset_tensor=proxy_dataset,
+        device=device,
     )
-
-    _, downstream_proxy_data = _sample_proxy_dataset([best_student_model], 1000)
-    evaluate_distillation_on_downstream_task(downstream_proxy_data, test_loader)
 
     table = wandb.Table(columns=["Aggregation", "Performance"])
     for k, v in results.items():
