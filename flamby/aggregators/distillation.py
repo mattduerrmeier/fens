@@ -19,6 +19,7 @@ def run_and_evaluate(
         ),
         epochs=200,
         batch_size=64,
+        device=device,
     )
 
     # get loss
@@ -41,8 +42,9 @@ def train_student(
     ],
     epochs: int,
     batch_size: int,
+    device: torch.device,
 ) -> torch.nn.Module:
-    student_model = Decoder(output_dimensions=13 + 1)
+    student_model = Decoder(output_dimensions=13 + 1).to(device)
     optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-3)
 
     batches = len(proxy_dataset) // batch_size
@@ -67,6 +69,10 @@ def train_student(
         for batch_latents, batch_features, batch_targets in torch.utils.data.DataLoader(
             proxy_dataset, batch_size=batch_size
         ):
+            batch_latents = batch_latents.to(device)
+            batch_features = batch_features.to(device)
+            batch_targets = batch_targets.to(device)
+
             optimizer.zero_grad()
 
             teacher_output = (batch_features, batch_targets)
