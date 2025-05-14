@@ -83,7 +83,7 @@ def get_parameters(dataset):
         "baseline_loss": BaselineLoss,
         "metric": metric,
         "require_argmax": require_argmax,
-        "nn_model": SmallNN,  # TODO: define a new smalNN for our task
+        "nn_model": lambda: SmallNN(NUM_CLIENTS),
     }
 
     return params
@@ -147,6 +147,8 @@ def run(args, device):
             proxy_frac=args.proxy_frac,
             seed=args.seed,
         )
+        print(f"VAE trains on {len(train_dataset)} records with label distribution {label_dist}")
+
         train_dataloader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=params["batch_size"],

@@ -29,13 +29,12 @@ class SmallNN_FISIC(nn.Module):
 
 
 class SmallNN_FHD(nn.Module):
-    def __init__(self):
+    def __init__(self, num_clients: int):
         super().__init__()
         d = 4
-        total_clients = 4
         feature_size = 14
-        self.fc1 = nn.Linear(total_clients * feature_size, feature_size * total_clients * d)
-        self.fc2 = nn.Linear(total_clients * d * feature_size, feature_size)
+        self.fc1 = nn.Linear(num_clients * feature_size, feature_size * num_clients * d)
+        self.fc2 = nn.Linear(num_clients * d * feature_size, feature_size)
 
     def forward(self, x):
         x = x.flatten(start_dim=1)
