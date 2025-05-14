@@ -205,10 +205,10 @@ class Decoder(nn.Module):
 class MseKldLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        self._mse_loss = nn.MSELoss(reduction="sum")
+        self._mse_loss = nn.MSELoss()
 
     def forward(self, x_recon, x, mu, logvar):
-        loss_MSE = self._mse_loss(x_recon, x)
+        loss_MSE = self._mse_loss(x_recon, x) + 2 * self._mse_loss(x_recon[:, -1], x[:, -1])
         loss_KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
         return loss_MSE, loss_KLD
