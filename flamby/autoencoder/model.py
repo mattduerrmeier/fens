@@ -141,9 +141,9 @@ class Decoder(nn.Module):
     def __init__(
         self,
         output_dimensions: int,
-        wide_hidden_dimensions=50,
-        narrow_hidden_dimensions=12,
-        latent_dimensions=3,
+        wide_hidden_dimensions: int = 32,
+        narrow_hidden_dimensions: int = 12,
+        latent_dimensions: int = 8,
     ):
         super(Decoder, self).__init__()
         self.latent_dimensions = latent_dimensions
