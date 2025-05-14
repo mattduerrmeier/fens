@@ -1,6 +1,13 @@
 import torch
 from aggregators.average import averaging
+from aggregators.distillation import train_student
+from aggregators.distillation import (
+    evaluate_on_downstream_task as evaluate_distillation_on_downstream_task,
+)
 from aggregators.linear import linear_mapping
+from aggregators.neural import (
+    evaluate_on_downstream_task as evaluate_neural_on_downstream_task,
+)
 from aggregators.neural import nn_mapping
 from autoencoder.model import Autoencoder, Decoder
 from train import evaluate_downstream_task
@@ -44,16 +51,22 @@ def _determine_ensemble_proxy_dataset(
 def _sample_proxy_dataset(
     models: list[Autoencoder | Decoder],
     samples: int,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
+    latents: list[torch.Tensor] = []
     outputs: list[torch.Tensor] = []
 
     for model in models:
         latent = model.sample_latent(samples)
         synthetic_x, synthetic_y = model.sample_from_latent(latent)
 
-        outputs.append(torch.cat((synthetic_x.detach(), synthetic_y.detach()), dim=1))
+        latents.append(latent)
+        outputs.append(
+            torch.cat(
+                (synthetic_x.detach(), synthetic_y.detach().clip(0, 1).round()), dim=1
+            )
+        )
 
-    return torch.stack(outputs)
+    return torch.stack(latents), torch.stack(outputs)
 
 
 def evaluate_all_aggregations(
@@ -137,20 +150,10 @@ def evaluate_all_aggregations(
         testset, metric, trainset, device, trainable_agg_params, require_argmax
     )
 
-    proxy_dataset = _sample_proxy_dataset(models=models, samples=10_000)
-    proxy_dataset = proxy_dataset.swapaxes(0, 1)
-    downstream_dataset = best_model(proxy_dataset).detach()
+    proxy_latents, proxy_dataset = _sample_proxy_dataset(models=models, samples=1_000)
 
-    nn_agg_train_accuracy, nn_agg_test_accuracy = evaluate_downstream_task(
-        "nn_agg",
-        torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(
-                downstream_dataset[:, :-1],
-                downstream_dataset[:, -1].unsqueeze(dim=1).clip(0, 1).round(),
-            ),
-            batch_size=32,
-        ),
-        test_loader,
+    nn_agg_train_accuracy, nn_agg_test_accuracy = evaluate_neural_on_downstream_task(
+        best_model, proxy_dataset, test_loader
     )
 
     results["neural_network"] = {
@@ -158,6 +161,23 @@ def evaluate_all_aggregations(
         "downstream_train_accuracy": nn_agg_train_accuracy,
         "downstream_test_accuracy": nn_agg_test_accuracy,
     }
+
+    # TODO: determine number of features dynamically
+    student_model = Decoder(output_dimensions=13 + 1)
+    best_student_model = train_student(
+        student_model=student_model,
+        proxy_dataset=torch.utils.data.TensorDataset(
+            proxy_latents.flatten(end_dim=1),
+            proxy_dataset.flatten(end_dim=1)[:, :-1],
+            proxy_dataset.flatten(end_dim=1)[:, -1:],
+        ),
+        epochs=200,
+        batch_size=64,
+        optimizer=torch.optim.Adam(student_model.parameters(), lr=1e-3),
+    )
+
+    _, downstream_proxy_data = _sample_proxy_dataset([best_student_model], 1000)
+    evaluate_distillation_on_downstream_task(downstream_proxy_data, test_loader)
 
     table = wandb.Table(columns=["Aggregation", "Performance"])
     for k, v in results.items():
