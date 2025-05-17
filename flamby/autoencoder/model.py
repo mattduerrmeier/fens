@@ -133,9 +133,8 @@ class Autoencoder(nn.Module):
         synthetic_x: torch.Tensor
         synthetic_y: torch.Tensor
         if self.num_classes > 2:
-            output[:, -self.num_classes :].clip_(0, 1)
-            output[:, -self.num_classes :].round_()
-
+            # output[:, -self.num_classes :].clip_(0, 1)
+            # output[:, -self.num_classes :].round_()
             synthetic_x = output[:, : -self.num_classes]
             synthetic_y = output[:, -self.num_classes :]
             if requires_argmax:
@@ -212,9 +211,9 @@ class Decoder(nn.Module):
         synthetic_x: torch.Tensor
         synthetic_y: torch.Tensor
         if self.num_classes > 2:
-            output[:, -self.num_classes :].clip_(0, 1)
-            output[:, -self.num_classes :].round_()
-
+            # not clipping and rounding seems to help with performance
+            # output[:, -self.num_classes :].clip_(0, 1)
+            # output[:, -self.num_classes :].round_()
             synthetic_x = output[:, : -self.num_classes]
             synthetic_y = output[:, -self.num_classes :]
             if requires_argmax:
@@ -229,14 +228,14 @@ class Decoder(nn.Module):
 
 
 class MseKldLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes, target_coeff=2):
         super().__init__()
         self._mse_loss = nn.MSELoss()
+        self.num_classes = num_classes if num_classes > 2 else 1
+        self.target_coeff = target_coeff
 
     def forward(self, x_recon, x, mu, logvar):
-        loss_MSE = self._mse_loss(
-            x_recon, x
-        )  # + 2 * self._mse_loss(x_recon[:, -1], x[:, -1])
+        loss_MSE = self._mse_loss(x_recon, x) + self.target_coeff * self._mse_loss(x_recon[:, -self.num_classes:], x[:, -self.num_classes:])
         loss_KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
         return loss_MSE, loss_KLD

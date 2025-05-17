@@ -6,6 +6,7 @@ from .common import AggregatorResult, sample_proxy_dataset
 
 
 def run_and_evaluate(
+    model_config: dict[str, int],
     test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
     proxy_latents_tensor: torch.Tensor,
     proxy_dataset_tensor: torch.Tensor,
@@ -26,6 +27,7 @@ def run_and_evaluate(
     )
 
     best_student_model = train_student(
+        model_config,
         proxy_dataset,
         epochs=50,
         batch_size=64,
@@ -48,6 +50,7 @@ def run_and_evaluate(
 
 
 def train_student(
+    model_config: dict[str, int],
     proxy_dataset: torch.utils.data.Dataset[
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     ],
@@ -59,7 +62,7 @@ def train_student(
     # output_dim = input size + number of classes
     output_dimensions = len(proxy_dataset[0][1]) + len(proxy_dataset[0][2])
     student_model = Decoder(
-        output_dimensions=output_dimensions, num_classes=num_labels
+        output_dimensions=output_dimensions, num_classes=num_labels, **model_config,
     ).to(device)
     optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-3)
 

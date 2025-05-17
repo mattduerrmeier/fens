@@ -13,6 +13,7 @@ from mnist_dataset import MNISTDataset
 
 
 def get_parameters(dataset):
+    model_config = {}
     if dataset == "FedHeartDisease":
         from flamby.datasets.fed_heart_disease import (
             BATCH_SIZE,
@@ -82,6 +83,11 @@ def get_parameters(dataset):
 
         NUM_CLASSES = 10
         require_argmax = False
+        model_config = {
+            "wide_hidden_dimensions": 512,
+            "narrow_hidden_dimensions": 256,
+            "latent_dimensions": 84,
+        }
         from models import SmallNN_MNIST as SmallNN
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
@@ -100,6 +106,7 @@ def get_parameters(dataset):
         "metric": metric,
         "require_argmax": require_argmax,
         "nn_model": lambda: SmallNN(NUM_CLIENTS),
+        "model_config": model_config, # empty config for all but MNIST!
     }
 
     return params
@@ -194,7 +201,7 @@ def run(args, device):
 
         # encoder is trained on the data and labels
         D_in = len(train_dataset[0][0]) + len(train_dataset[0][1])
-        model = Autoencoder(D_in, num_classes)
+        model = Autoencoder(D_in, num_classes, **params["model_config"])
 
         if args.use_trained_models:
             logging.info(f"Loading trained model {client_idx}")
@@ -204,7 +211,7 @@ def run(args, device):
                 )
             )
         else:
-            loss_fn = MseKldLoss()
+            loss_fn = MseKldLoss(num_classes, target_coeff=3)
             optimizer = params["optimizer"](model.parameters(), lr=params["lr"])
 
             # Constant learning rate scheduler
@@ -303,6 +310,7 @@ def run(args, device):
         "nn_epochs": args.nn_epochs,
         "nn_model": params["nn_model"],
         "criterion": mse_metric,
+        "model_config": params["model_config"],
     }
 
     num_labels = len(label_distribution)

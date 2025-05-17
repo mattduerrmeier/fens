@@ -134,6 +134,7 @@ def evaluate_all_aggregations(
     )
 
     results["distillation"] = distillation.run_and_evaluate(
+        model_config=trainable_agg_params["model_config"],
         test_loader=test_loader,
         proxy_latents_tensor=proxy_latents,
         proxy_dataset_tensor=proxy_dataset,
