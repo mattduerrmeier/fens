@@ -51,8 +51,7 @@ def train_and_evaluate_aggs(
             loss.backward()
             optimizer.step()
 
-            # TODO: why is there a coeff here?
-            loss_acc += loss.item()  # * data.size(0)
+            loss_acc += loss.item()
 
         scheduler.step()
 
@@ -141,7 +140,6 @@ def train_and_evaluate(
             optimizer.zero_grad()
 
             # forward pass
-            # TODO: do we pass the target with the data?
             out, mu, logvar = model((data, target))
             # need to extract the two term to be able to log both of them
 
@@ -153,8 +151,7 @@ def train_and_evaluate(
             loss.backward()
             optimizer.step()
 
-            # TODO: why is there a coeff here?
-            loss_acc += loss.item()  # * data.size(0)
+            loss_acc += loss.item()
             mse_acc += mse_loss.item()
             kld_acc += kld_loss.item()
 
@@ -227,13 +224,13 @@ def evaluate(model, loss_fn, test_loader, device):
     return loss_acc, mse_acc, kld_acc
 
 
-def _determine_dataset_feature_count(loader: torch.utils.data.DataLoader) -> int:
+def _determine_dataset_feature_count(loader: torch.utils.data.DataLoader) -> (int, int):
     batch_features, _batch_targets = next(iter(loader))
-    return batch_features.shape[1]
+    return batch_features.shape[1], _batch_targets.shape[1]
 
 
 class _DownstreamTaskModel(torch.nn.Module):
-    def __init__(self, input_dimensions: int):
+    def __init__(self, input_dimensions: int, output_dimensions: int):
         super(_DownstreamTaskModel, self).__init__()
 
         self.layer = torch.nn.Sequential(
@@ -247,7 +244,7 @@ class _DownstreamTaskModel(torch.nn.Module):
                 torch.nn.LeakyReLU(),
             ),
             torch.nn.Dropout(0.1),
-            torch.nn.Linear(256, 2),
+            torch.nn.Linear(256, output_dimensions),
         )
 
     def forward(self, x: torch.Tensor):
@@ -260,9 +257,10 @@ def evaluate_downstream_task(
     loader_test: torch.utils.data.DataLoader,
     device: torch.device,
 ) -> tuple[float, float]:
-    input_dimensions = _determine_dataset_feature_count(loader_train)
+    input_dimensions, output_dimensions = _determine_dataset_feature_count(loader_train)
+    print(input_dimensions, output_dimensions)
 
-    model = _DownstreamTaskModel(input_dimensions)
+    model = _DownstreamTaskModel(input_dimensions, 10)
     optimizer = torch.optim.AdamW(model.parameters())
 
     loss_function = torch.nn.CrossEntropyLoss()

@@ -120,7 +120,7 @@ class Autoencoder(nn.Module):
         return distribution.rsample(sample_shape=torch.Size([samples]))
 
     def sample_from_latent(
-        self, latent: torch.Tensor
+        self, latent: torch.Tensor, is_mnist: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # sigma = torch.exp(logvar / 2)
         output: torch.Tensor = self.decode(latent)
@@ -128,8 +128,12 @@ class Autoencoder(nn.Module):
         # Predicted target probably does not have value one of the permitted values ('0' or '1')
         # We first clip the target value to ensure that it lies in [0, 1] and then round it to obtain either '0' or '1'
         # Rounding without clipping may yield other integer values
-        output[:, -1].clip_(0, 1)
-        output[:, -1].round_()
+        if is_mnist:
+            output[:, -1].clip_(0, 9)
+            output[:, -1].round_()
+        else:
+            output[:, -1].clip_(0, 1)
+            output[:, -1].round_()
 
         return (
             output[:, :-1],

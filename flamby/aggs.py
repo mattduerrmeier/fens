@@ -119,7 +119,7 @@ def evaluate_all_aggregations(
     }
 
     proxy_latents, proxy_dataset = common.sample_proxy_dataset(
-        models=models, samples=1_000
+        models=models, samples=1_000, device=device
     )
 
     results["neural_network"] = neural.run_and_evaluate(

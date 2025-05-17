@@ -57,3 +57,18 @@ class SmallNN_FCAM(nn.Module):
         x = F.sigmoid(x)
         x = self.fc2(x)
         return x
+
+class SmallNN_MNIST(nn.Module):
+    def __init__(self, num_clients: int):
+        super().__init__()
+        d = 2
+        feature_size = 784 + 1
+        self.fc1 = nn.Linear(num_clients * feature_size, feature_size * num_clients * d)
+        self.fc2 = nn.Linear(num_clients * d * feature_size, feature_size)
+
+    def forward(self, x):
+        x = x.flatten(start_dim=1)
+        x = self.fc1(x)
+        x = F.sigmoid(x)
+        x = self.fc2(x)
+        return x

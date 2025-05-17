@@ -1,12 +1,13 @@
 import torch
-from torchvision.transforms import v2
+from torchvision.transforms import Compose, Resize, Grayscale, ToTensor
 from torchvision.datasets import MNIST
 from torch.utils.data import Dataset, Subset
+import torch.nn.functional as F
 from typing import cast, List
 import numpy as np
 import numpy.random as npr
 
-NUM_CENTERS = 4
+NUM_CENTERS = 2
 
 def split(dataset: Dataset, nr_clients: int, iid: bool, seed: int) -> List[Subset]:
     rng = npr.default_rng(seed)
@@ -31,6 +32,8 @@ def split(dataset: Dataset, nr_clients: int, iid: bool, seed: int) -> List[Subse
 
 
 class MNISTDataset(Dataset):
+    list_splits = None
+
     def __init__(
         self,
         center: int = 0,
@@ -40,12 +43,17 @@ class MNISTDataset(Dataset):
     ):
         assert center in [*range(0, NUM_CENTERS)]
 
-        transforms = v2.Compose([
-            v2.Grayscale(),
-            v2.ToDtype(torch.float32, scale=True),
-            FlattenTransform()
+        transforms = Compose([
+            Grayscale(),
+            ToTensor(),
         ])
-        dataset = MNIST(train=train, transform=transforms, download=download)
+
+        dataset = MNIST(
+            root="data/",
+            train=train,
+            transform=transforms,
+            download=download,
+        )
 
         if pooled:
             self.data = dataset
@@ -60,11 +68,14 @@ class MNISTDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        x, y = self.data[idx]
+        x = x.flatten(start_dim=0)
+        y = torch.tensor([y])
+        return x, y
 
 
-class FlattenTransform(torch.nn.Module):
-    """Used such that the input of the VAE is a flat tensor."""
-    def forward(img, label):
-        new_img = img.flatten(start_dim=0)
-        return new_img, label
+# class FlattenTransform(torch.nn.Module):
+#     """Used such that the input of the VAE is a flat tensor."""
+#     def forward(img):
+#         new_img = img.flatten(start_dim=0)
+#         return new_img

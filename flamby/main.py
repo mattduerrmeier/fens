@@ -68,19 +68,20 @@ def get_parameters(dataset):
         require_argmax = True
         from models import SmallNN_FISIC as SmallNN
     elif dataset == "MNIST":
-        BATCH_SIZE = 32
+        BATCH_SIZE = 128
         LR = 1e-4
-        NUM_EPOCHS_POOLED = 10
-        NUM_CLIENTS = 4
+        NUM_EPOCHS_POOLED = 5
+        NUM_CLIENTS = 2
         Optimizer = torch.optim.Adam
         collate_fn = None
         Baseline = None
         BaselineLoss = None
-        metric = accuracy
+        metric = None
         FedDataset = MNISTDataset
 
         NUM_CLASSES = 10
         require_argmax = False
+        from models import SmallNN_MNIST as SmallNN
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -103,10 +104,10 @@ def get_parameters(dataset):
     return params
 
 
-def _sample_proxy_dataset(model: Autoencoder, samples: int, device):
+def _sample_proxy_dataset(model: Autoencoder, samples: int, device: torch.device):
     latent = model.sample_latent(samples)
     latent = latent.to(device)
-    synthetic_x, synthetic_y = model.sample_from_latent(latent)
+    synthetic_x, synthetic_y = model.sample_from_latent(latent, is_mnist=True)
 
     return torch.utils.data.TensorDataset(synthetic_x.detach(), synthetic_y.detach())
 
@@ -148,7 +149,7 @@ def run(args, device):
         test_dataset,
         batch_size=params["batch_size"],
         shuffle=False,
-        num_workers=0,
+        num_workers=4,
         collate_fn=params["collate_fn"],
     )
 
@@ -185,8 +186,8 @@ def run(args, device):
 
         torch.manual_seed(args.seed + client_idx)
 
-        D_in = len(train_dataset[0][0])
-        model = Autoencoder(D_in + 1)
+        D_in = len(train_dataset[0][0]) + len(train_dataset[0][1])
+        model = Autoencoder(D_in)
 
         if args.use_trained_models:
             logging.info(f"Loading trained model {client_idx}")
@@ -359,8 +360,8 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     gpu_idx = args.gpu_idx
-    device = torch.device("cpu")
-    # device = torch.device(f"cuda:{gpu_idx}" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cpu")
+    device = torch.device(f"cuda:{gpu_idx}" if torch.cuda.is_available() else "cpu")
 
     # extract name from args.result_dir
     run_name = os.path.basename(args.result_dir)

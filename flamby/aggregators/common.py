@@ -13,12 +13,14 @@ class AggregatorResult(typing.TypedDict):
 def sample_proxy_dataset(
     models: list[typing.Union[Autoencoder, Decoder]],
     samples: int,
+    device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     latents: list[torch.Tensor] = []
     outputs: list[torch.Tensor] = []
 
     for model in models:
         latent = model.sample_latent(samples)
+        latent = latent.to(device)
         synthetic_x, synthetic_y = model.sample_from_latent(latent)
 
         latents.append(latent)

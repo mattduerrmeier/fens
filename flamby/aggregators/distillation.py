@@ -23,7 +23,7 @@ def run_and_evaluate(
     )
 
     # get loss
-    _, downstream_proxy_data = sample_proxy_dataset([best_student_model], 1000)
+    _, downstream_proxy_data = sample_proxy_dataset([best_student_model], 1000, device)
 
     downstream_train_accuracy, downstream_test_accuracy = evaluate_on_downstream_task(
         downstream_proxy_data, test_loader, device
@@ -44,7 +44,7 @@ def train_student(
     batch_size: int,
     device: torch.device,
 ) -> torch.nn.Module:
-    student_model = Decoder(output_dimensions=13 + 1).to(device)
+    student_model = Decoder(output_dimensions=784 + 1).to(device)
     optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-3)
 
     batches = len(proxy_dataset) // batch_size
