@@ -62,7 +62,9 @@ def train_student(
     # output_dim = input size + number of classes
     output_dimensions = len(proxy_dataset[0][1]) + len(proxy_dataset[0][2])
     student_model = Decoder(
-        output_dimensions=output_dimensions, num_classes=num_labels, **model_config,
+        output_dimensions=output_dimensions,
+        num_classes=num_labels,
+        **model_config,
     ).to(device)
     optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-3)
 

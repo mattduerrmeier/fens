@@ -72,7 +72,7 @@ def train_and_evaluate_aggs(
             # store the best model by making a copy
             best_model = copy.deepcopy(model)
 
-        logging.info(f"Epoch: {epoch} test loss: {test_loss:.4f}")
+        logging.info(f"Epoch: {epoch}, test loss: {test_loss:.4f}")
         wandb.log(
             {
                 f"{id_str}/test_loss": test_loss,
@@ -181,7 +181,7 @@ def train_and_evaluate(
             best_model = copy.deepcopy(model)
 
         logging.info(
-            f"Epoch: {epoch} test loss: {test_loss:.4f}, mse: {test_mse:.4f}, kld: {test_kld:.4f}"
+            f"Epoch: {epoch}, test loss: {test_loss:.4f}, mse: {test_mse:.4f}, kld: {test_kld:.4f}"
         )
         wandb.log(
             {
@@ -347,10 +347,9 @@ def evaluate_downstream_task(
             }
         )
         print(
-            "Downstream task training: "
-            "epoch {}, train loss: {:.2f}, train acc:{:.2f}%, test loss: {:.2f}, test acc: {:.2f}%".format(
-                epoch, train_loss, train_accuracy * 100, test_loss, test_accuracy * 100
-            )
+            f"Downstream task training: epoch {epoch}, "
+            f"train loss: {train_loss:.2f}, train acc: {100 * train_accuracy:.2f}%, "
+            f"test loss: {test_loss:.2f}, test acc: {100 * test_accuracy:.2f}%"
         )
 
     return train_accuracy, test_accuracy

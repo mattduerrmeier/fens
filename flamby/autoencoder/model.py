@@ -235,7 +235,9 @@ class MseKldLoss(nn.Module):
         self.target_coeff = target_coeff
 
     def forward(self, x_recon, x, mu, logvar):
-        loss_MSE = self._mse_loss(x_recon, x) + self.target_coeff * self._mse_loss(x_recon[:, -self.num_classes:], x[:, -self.num_classes:])
+        loss_MSE = self._mse_loss(x_recon, x) + self.target_coeff * self._mse_loss(
+            x_recon[:, -self.num_classes :], x[:, -self.num_classes :]
+        )
         loss_KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
         return loss_MSE, loss_KLD

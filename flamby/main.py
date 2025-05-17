@@ -106,7 +106,7 @@ def get_parameters(dataset):
         "metric": metric,
         "require_argmax": require_argmax,
         "nn_model": lambda: SmallNN(NUM_CLIENTS),
-        "model_config": model_config, # empty config for all but MNIST!
+        "model_config": model_config,  # empty config for all but MNIST!
     }
 
     return params
@@ -146,7 +146,7 @@ def run(args, device):
 
     dataset = load_dataset(dataset_class)
     label_distribution: list[int] = determine_label_distribution(dataset, num_classes)
-    print(
+    logging.info(
         "Training on dataset with overall label distribution of: ", label_distribution
     )
 
@@ -185,7 +185,7 @@ def run(args, device):
         client_label_distribution = determine_label_distribution(
             train_dataset, num_classes
         )
-        print(
+        logging.info(
             f"VAE trains on {len(train_dataset)} records with label distribution {client_label_distribution}"
         )
 
@@ -263,7 +263,7 @@ def run(args, device):
             id_str = f"client_{client_idx}"
             logging.info(f"[Evaluating client {client_idx}]")
 
-            loss_fn = MseKldLoss()
+            loss_fn = MseKldLoss(num_classes, target_coeff=3)
             test_loss, _, _ = evaluate(
                 trained_models[client_idx],
                 loss_fn,
