@@ -15,6 +15,7 @@ def run_and_evaluate(
         tuple[torch.Tensor, torch.Tensor]
     ],
     proxy_dataset_tensor: torch.Tensor,
+    num_labels: int,
     device: torch.device,
 ) -> AggregatorResult:
     mse_loss, best_model = nn_mapping(
@@ -26,7 +27,7 @@ def run_and_evaluate(
     )
 
     train_accuracy, test_accuracy = evaluate_on_downstream_task(
-        best_model, proxy_dataset_tensor, downstream_test_loader, device
+        best_model, proxy_dataset_tensor, downstream_test_loader, num_labels, device
     )
 
     return {
@@ -69,21 +70,36 @@ def evaluate_on_downstream_task(
     model: torch.nn.Module,
     proxy_dataset: torch.Tensor,
     test_loader: torch.utils.data.DataLoader,
+    num_labels: int,
     device: torch.device,
 ) -> tuple[float, float]:
     proxy_dataset = proxy_dataset.swapaxes(0, 1)
     downstream_dataset = model(proxy_dataset).detach()
 
+    synthetic_x: torch.Tensor
+    synthetic_y: torch.Tensor
+    if num_labels > 2:
+        synthetic_x = downstream_dataset[:, :-num_labels]
+        synthetic_y = (
+            downstream_dataset[:, -num_labels:]
+            .clip(0, 1)
+            .round()
+            .argmax(dim=1, keepdim=True)
+        )
+    else:
+        synthetic_x = downstream_dataset[:, :-1]
+        synthetic_y = downstream_dataset[:, -1].unsqueeze(dim=1).clip(0, 1).round()
+
+    train_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(synthetic_x, synthetic_y),
+        batch_size=32,
+    )
+
     train_accuracy, test_accuracy = evaluate_downstream_task(
         "nn_agg",
-        torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(
-                downstream_dataset[:, :-1],
-                downstream_dataset[:, -1].unsqueeze(dim=1).clip(0, 1).round(),
-            ),
-            batch_size=32,
-        ),
+        train_loader,
         test_loader,
+        num_labels,
         device,
     )
 

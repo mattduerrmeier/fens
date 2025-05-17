@@ -88,7 +88,7 @@ def train_student(
 
             total_loss += loss.item()
 
-        print(f"Epoch: {epoch} Loss: {total_loss / batches :.3f}")
+        print(f"Epoch: {epoch} Loss: {total_loss / batches:.3f}")
 
 
 def merge(tensors: list[torch.Tensor] | tuple[torch.Tensor, ...]) -> torch.Tensor:
@@ -180,7 +180,7 @@ def _evaluate_decoder(
         dataset_test,
         input_dimensions=input_dimensions,
     )
-    
+
 
 def main(
     *,

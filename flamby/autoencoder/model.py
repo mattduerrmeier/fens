@@ -18,11 +18,13 @@ class Autoencoder(nn.Module):
     def __init__(
         self,
         input_dimensions: int,
+        num_classes: int,
         wide_hidden_dimensions: int = 32,
         narrow_hidden_dimensions: int = 12,
         latent_dimensions: int = 8,
     ):
         super(Autoencoder, self).__init__()
+        self.num_classes = num_classes
 
         self.encoder = nn.Sequential(
             nn.Sequential(
@@ -120,7 +122,7 @@ class Autoencoder(nn.Module):
         return distribution.rsample(sample_shape=torch.Size([samples]))
 
     def sample_from_latent(
-        self, latent: torch.Tensor, is_mnist: bool = False
+        self, latent: torch.Tensor, requires_argmax: bool = True
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # sigma = torch.exp(logvar / 2)
         output: torch.Tensor = self.decode(latent)
@@ -128,29 +130,37 @@ class Autoencoder(nn.Module):
         # Predicted target probably does not have value one of the permitted values ('0' or '1')
         # We first clip the target value to ensure that it lies in [0, 1] and then round it to obtain either '0' or '1'
         # Rounding without clipping may yield other integer values
-        if is_mnist:
-            output[:, -1].clip_(0, 9)
-            output[:, -1].round_()
+        synthetic_x: torch.Tensor
+        synthetic_y: torch.Tensor
+        if self.num_classes > 2:
+            output[:, -self.num_classes :].clip_(0, 1)
+            output[:, -self.num_classes :].round_()
+
+            synthetic_x = output[:, : -self.num_classes]
+            synthetic_y = output[:, -self.num_classes :]
+            if requires_argmax:
+                synthetic_y = synthetic_y.argmax(dim=1).unsqueeze(dim=1).long()
         else:
             output[:, -1].clip_(0, 1)
             output[:, -1].round_()
+            synthetic_x = output[:, :-1]
+            synthetic_y = output[:, -1].unsqueeze(dim=1).long()
 
-        return (
-            output[:, :-1],
-            output[:, -1].unsqueeze(dim=1).long(),
-        )
+        return synthetic_x, synthetic_y
 
 
 class Decoder(nn.Module):
     def __init__(
         self,
         output_dimensions: int,
+        num_classes: int,
         wide_hidden_dimensions: int = 32,
         narrow_hidden_dimensions: int = 12,
         latent_dimensions: int = 8,
     ):
         super(Decoder, self).__init__()
         self.latent_dimensions = latent_dimensions
+        self.num_classes = num_classes
 
         self.layer = nn.Sequential(
             nn.Sequential(
@@ -190,20 +200,32 @@ class Decoder(nn.Module):
         return distribution.rsample(sample_shape=torch.Size([samples]))
 
     def sample_from_latent(
-        self, latent: torch.Tensor
+        self,
+        latent: torch.Tensor,
+        requires_argmax: bool = True,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         output: torch.Tensor = self(latent)
 
         # Predicted target probably does not have value one of the permitted values ('0' or '1')
         # We first clip the target value to ensure that it lies in [0, 1] and then round it to obtain either '0' or '1'
         # Rounding without clipping may yield other integer values
-        output[:, -1].clip_(0, 1)
-        output[:, -1].round_()
+        synthetic_x: torch.Tensor
+        synthetic_y: torch.Tensor
+        if self.num_classes > 2:
+            output[:, -self.num_classes :].clip_(0, 1)
+            output[:, -self.num_classes :].round_()
 
-        return (
-            output[:, :-1],
-            output[:, -1].unsqueeze(dim=1).long(),
-        )
+            synthetic_x = output[:, : -self.num_classes]
+            synthetic_y = output[:, -self.num_classes :]
+            if requires_argmax:
+                synthetic_y = synthetic_y.argmax(dim=1).unsqueeze(dim=1).long()
+        else:
+            output[:, -1].clip_(0, 1)
+            output[:, -1].round_()
+            synthetic_x = output[:, :-1]
+            synthetic_y = output[:, -1].unsqueeze(dim=1).long()
+
+        return synthetic_x, synthetic_y
 
 
 class MseKldLoss(nn.Module):
@@ -212,7 +234,9 @@ class MseKldLoss(nn.Module):
         self._mse_loss = nn.MSELoss()
 
     def forward(self, x_recon, x, mu, logvar):
-        loss_MSE = self._mse_loss(x_recon, x) + 2 * self._mse_loss(x_recon[:, -1], x[:, -1])
+        loss_MSE = self._mse_loss(
+            x_recon, x
+        )  # + 2 * self._mse_loss(x_recon[:, -1], x[:, -1])
         loss_KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
         return loss_MSE, loss_KLD

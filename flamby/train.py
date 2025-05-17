@@ -224,9 +224,9 @@ def evaluate(model, loss_fn, test_loader, device):
     return loss_acc, mse_acc, kld_acc
 
 
-def _determine_dataset_feature_count(loader: torch.utils.data.DataLoader) -> (int, int):
+def _determine_dataset_feature_count(loader: torch.utils.data.DataLoader) -> int:
     batch_features, _batch_targets = next(iter(loader))
-    return batch_features.shape[1], _batch_targets.shape[1]
+    return batch_features.shape[1]
 
 
 class _DownstreamTaskModel(torch.nn.Module):
@@ -255,12 +255,12 @@ def evaluate_downstream_task(
     id: str,
     loader_train: torch.utils.data.DataLoader,
     loader_test: torch.utils.data.DataLoader,
+    num_classes: int,
     device: torch.device,
 ) -> tuple[float, float]:
-    input_dimensions, output_dimensions = _determine_dataset_feature_count(loader_train)
-    print(input_dimensions, output_dimensions)
+    input_dimensions = _determine_dataset_feature_count(loader_train)
 
-    model = _DownstreamTaskModel(input_dimensions, 10)
+    model = _DownstreamTaskModel(input_dimensions, num_classes)
     optimizer = torch.optim.AdamW(model.parameters())
 
     loss_function = torch.nn.CrossEntropyLoss()
@@ -275,7 +275,10 @@ def evaluate_downstream_task(
 
         for features_train, targets_train in loader_train:
             targets_train = targets_train.squeeze(dim=1)
-            features_train, targets_train = features_train.to(device), targets_train.to(device)
+            features_train, targets_train = (
+                features_train.to(device),
+                targets_train.to(device),
+            )
 
             optimizer.zero_grad()
 
@@ -304,11 +307,16 @@ def evaluate_downstream_task(
         total_predictions = 0
 
         for features_test, targets_test in loader_test:
+            if num_classes > 2:
+                targets_test = targets_test.argmax(dim=1, keepdim=True)
+
             targets_test = targets_test.squeeze(dim=1)
-            features_test, targets_test = features_test.to(device), targets_test.to(device)
+            features_test, targets_test = (
+                features_test.to(device),
+                targets_test.to(device),
+            )
 
             outputs_test = model(features_test)
-
             loss = loss_function(outputs_test, targets_test.long())
 
             predictions_test = torch.argmax(outputs_test, 1)

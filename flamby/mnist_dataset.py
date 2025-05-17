@@ -9,6 +9,7 @@ import numpy.random as npr
 
 NUM_CENTERS = 2
 
+
 def split(dataset: Dataset, nr_clients: int, iid: bool, seed: int) -> List[Subset]:
     rng = npr.default_rng(seed)
 
@@ -17,9 +18,7 @@ def split(dataset: Dataset, nr_clients: int, iid: bool, seed: int) -> List[Subse
         splits = np.array_split(rng.permutation(len(dataset)), nr_clients)
     else:
         # sort the dataset per class
-        sorted_indices = np.argsort(
-            np.array([target for _data, target in dataset])
-        )
+        sorted_indices = np.argsort(np.array([target for _data, target in dataset]))
         # shard per class, times 2
         shards = np.array_split(sorted_indices, 2 * nr_clients)
         shuffled_shard_indices = rng.permutation(len(shards))
@@ -39,14 +38,16 @@ class MNISTDataset(Dataset):
         center: int = 0,
         train: bool = True,
         pooled: bool = False,
-        download: bool = True
+        download: bool = True,
     ):
         assert center in [*range(0, NUM_CENTERS)]
 
-        transforms = Compose([
-            Grayscale(),
-            ToTensor(),
-        ])
+        transforms = Compose(
+            [
+                Grayscale(),
+                ToTensor(),
+            ]
+        )
 
         dataset = MNIST(
             root="data/",
@@ -59,7 +60,9 @@ class MNISTDataset(Dataset):
             self.data = dataset
         else:
             if MNISTDataset.list_splits is None:
-                MNISTDataset.list_splits = split(dataset, nr_clients=NUM_CENTERS, iid=True, seed=42)
+                MNISTDataset.list_splits = split(
+                    dataset, nr_clients=NUM_CENTERS, iid=True, seed=42
+                )
 
             center_split = MNISTDataset.list_splits[center]
             self.data = center_split
@@ -70,12 +73,5 @@ class MNISTDataset(Dataset):
     def __getitem__(self, idx):
         x, y = self.data[idx]
         x = x.flatten(start_dim=0)
-        y = torch.tensor([y])
+        y = F.one_hot(torch.tensor(y), num_classes=10)
         return x, y
-
-
-# class FlattenTransform(torch.nn.Module):
-#     """Used such that the input of the VAE is a flat tensor."""
-#     def forward(img):
-#         new_img = img.flatten(start_dim=0)
-#         return new_img

@@ -21,13 +21,11 @@ def sample_proxy_dataset(
     for model in models:
         latent = model.sample_latent(samples)
         latent = latent.to(device)
-        synthetic_x, synthetic_y = model.sample_from_latent(latent)
+        synthetic_x, synthetic_y = model.sample_from_latent(
+            latent, requires_argmax=False
+        )
 
         latents.append(latent)
-        outputs.append(
-            torch.cat(
-                (synthetic_x.detach(), synthetic_y.detach().clip(0, 1).round()), dim=1
-            )
-        )
+        outputs.append(torch.cat((synthetic_x.detach(), synthetic_y.detach()), dim=1))
 
     return torch.stack(latents), torch.stack(outputs)

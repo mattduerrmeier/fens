@@ -9,16 +9,27 @@ def run_and_evaluate(
     test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
     proxy_latents_tensor: torch.Tensor,
     proxy_dataset_tensor: torch.Tensor,
+    num_labels: int,
     device: torch.device,
 ) -> AggregatorResult:
+    if num_labels > 2:
+        x_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, :-num_labels]
+        y_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, -num_labels:]
+    else:
+        x_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, :-1]
+        y_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, -1:]
+
+    proxy_dataset = torch.utils.data.TensorDataset(
+        proxy_latents_tensor.flatten(end_dim=1),
+        x_proxy,
+        y_proxy,
+    )
+
     best_student_model = train_student(
-        proxy_dataset=torch.utils.data.TensorDataset(
-            proxy_latents_tensor.flatten(end_dim=1),
-            proxy_dataset_tensor.flatten(end_dim=1)[:, :-1],
-            proxy_dataset_tensor.flatten(end_dim=1)[:, -1:],
-        ),
+        proxy_dataset,
         epochs=50,
         batch_size=64,
+        num_labels=num_labels,
         device=device,
     )
 
@@ -26,7 +37,7 @@ def run_and_evaluate(
     _, downstream_proxy_data = sample_proxy_dataset([best_student_model], 1000, device)
 
     downstream_train_accuracy, downstream_test_accuracy = evaluate_on_downstream_task(
-        downstream_proxy_data, test_loader, device
+        downstream_proxy_data, test_loader, num_labels, device
     )
 
     return {
@@ -42,9 +53,14 @@ def train_student(
     ],
     epochs: int,
     batch_size: int,
+    num_labels: int,
     device: torch.device,
 ) -> torch.nn.Module:
-    student_model = Decoder(output_dimensions=784 + 1).to(device)
+    # output_dim = input size + number of classes
+    output_dimensions = len(proxy_dataset[0][1]) + len(proxy_dataset[0][2])
+    student_model = Decoder(
+        output_dimensions=output_dimensions, num_classes=num_labels
+    ).to(device)
     optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-3)
 
     batches = len(proxy_dataset) // batch_size
@@ -55,10 +71,9 @@ def train_student(
         actual_output: tuple[torch.Tensor, torch.Tensor],
         expected_output: tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
-        return mse_loss(actual_output[0], expected_output[0]) +  mse_loss(
-            actual_output[1], expected_output[1].float()
-        )
-
+        x_loss = mse_loss(actual_output[0], expected_output[0])
+        y_loss = mse_loss(actual_output[1], expected_output[1].float())
+        return x_loss + y_loss
 
     loss_function = adapted_loss
 
@@ -77,7 +92,9 @@ def train_student(
             optimizer.zero_grad()
 
             teacher_output = (batch_features, batch_targets)
-            student_output = student_model.sample_from_latent(batch_latents)
+            student_output = student_model.sample_from_latent(
+                batch_latents, requires_argmax=False
+            )
 
             loss = loss_function(student_output, teacher_output)
 
@@ -86,7 +103,7 @@ def train_student(
 
             total_loss += loss.item()
 
-        print(f"Epoch: {epoch} Loss: {total_loss / batches :.3f}")
+        print(f"Epoch: {epoch} Loss: {total_loss / batches:.3f}")
 
     return student_model
 
@@ -94,20 +111,35 @@ def train_student(
 def evaluate_on_downstream_task(
     downstream_dataset: torch.Tensor,
     test_loader: torch.utils.data.DataLoader,
+    num_labels: int,
     device: torch.device,
 ) -> tuple[float, float]:
     downstream_dataset = downstream_dataset.flatten(end_dim=1)
 
+    synthetic_x: torch.Tensor
+    synthetic_y: torch.Tensor
+    if num_labels > 2:
+        synthetic_x = downstream_dataset[:, :-num_labels]
+        synthetic_y = (
+            downstream_dataset[:, -num_labels:]
+            .clip(0, 1)
+            .round()
+            .argmax(dim=1, keepdim=True)
+        )
+    else:
+        synthetic_x = downstream_dataset[:, :-1]
+        synthetic_y = downstream_dataset[:, -1].unsqueeze(dim=1).clip(0, 1).round()
+
+    train_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(synthetic_x, synthetic_y),
+        batch_size=32,
+    )
+
     train_accuracy, test_accuracy = evaluate_downstream_task(
         "distillation",
-        torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(
-                downstream_dataset[:, :-1],
-                downstream_dataset[:, -1].unsqueeze(dim=1).clip(0, 1).round(),
-            ),
-            batch_size=32,
-        ),
+        train_loader,
         test_loader,
+        num_labels,
         device,
     )
 

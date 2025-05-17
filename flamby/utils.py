@@ -119,13 +119,19 @@ def prepare_client_datasets(
 
 def determine_label_distribution(
     dataset: torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]],
+    num_classes: int,
 ) -> typing.Sequence[int]:
     loader = torch.utils.data.DataLoader(dataset, batch_size=1024, shuffle=False)
 
     labels: dict[tuple[typing.Any], int] = {}
     for _batch_features, batch_labels in loader:
-        batch_unique_values, batch_counts = typing.cast(torch.Tensor, batch_labels).unique(return_counts=True)
-        
+        if num_classes > 2:
+            batch_labels = batch_labels.argmax(dim=1)
+
+        batch_unique_values, batch_counts = typing.cast(
+            torch.Tensor, batch_labels
+        ).unique(return_counts=True)
+
         for unique_value, count in zip(batch_unique_values, batch_counts):
             try:
                 key = tuple(unique_value.tolist())
@@ -135,6 +141,7 @@ def determine_label_distribution(
             labels[key] = labels.get(key, 0) + count.item()
 
     return list(labels.values())
+
 
 def load_trainset_combined(
     dataset_name: str,

@@ -58,11 +58,12 @@ class SmallNN_FCAM(nn.Module):
         x = self.fc2(x)
         return x
 
+
 class SmallNN_MNIST(nn.Module):
     def __init__(self, num_clients: int):
         super().__init__()
-        d = 2
-        feature_size = 784 + 1
+        d = 4
+        feature_size = 784 + 10
         self.fc1 = nn.Linear(num_clients * feature_size, feature_size * num_clients * d)
         self.fc2 = nn.Linear(num_clients * d * feature_size, feature_size)
 

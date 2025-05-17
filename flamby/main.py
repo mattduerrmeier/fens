@@ -28,6 +28,7 @@ def get_parameters(dataset):
         from models import Baseline_FHD as Baseline
         from loss import BaselineLoss_FHD as BaselineLoss
 
+        BATCH_SIZE = 32
         NUM_CLASSES = 2
         NUM_CLIENTS = 3
         require_argmax = False
@@ -86,7 +87,7 @@ def get_parameters(dataset):
         raise ValueError(f"Unknown dataset: {dataset}")
 
     params = {
-        "batch_size": 32,
+        "batch_size": BATCH_SIZE,
         "lr": LR,
         "num_epochs": NUM_EPOCHS_POOLED,
         "num_clients": NUM_CLIENTS,
@@ -107,7 +108,7 @@ def get_parameters(dataset):
 def _sample_proxy_dataset(model: Autoencoder, samples: int, device: torch.device):
     latent = model.sample_latent(samples)
     latent = latent.to(device)
-    synthetic_x, synthetic_y = model.sample_from_latent(latent, is_mnist=True)
+    synthetic_x, synthetic_y = model.sample_from_latent(latent)
 
     return torch.utils.data.TensorDataset(synthetic_x.detach(), synthetic_y.detach())
 
@@ -134,10 +135,13 @@ def run(args, device):
     # load dataset
     num_clients = params["num_clients"]
     dataset_class = params["fed_dataset"]
+    num_classes = params["num_classes"]
 
     dataset = load_dataset(dataset_class)
-    label_distribution: list[int] = determine_label_distribution(dataset)
-    print("Training on dataset with overall label distribution of: ", label_distribution)
+    label_distribution: list[int] = determine_label_distribution(dataset, num_classes)
+    print(
+        "Training on dataset with overall label distribution of: ", label_distribution
+    )
 
     client_datasets, test_dataset = prepare_client_datasets(
         dataset=dataset,
@@ -171,7 +175,9 @@ def run(args, device):
             client_dataset, (1 - proxy_fraction, proxy_fraction)
         )
 
-        client_label_distribution = determine_label_distribution(train_dataset)
+        client_label_distribution = determine_label_distribution(
+            train_dataset, num_classes
+        )
         print(
             f"VAE trains on {len(train_dataset)} records with label distribution {client_label_distribution}"
         )
@@ -186,8 +192,9 @@ def run(args, device):
 
         torch.manual_seed(args.seed + client_idx)
 
+        # encoder is trained on the data and labels
         D_in = len(train_dataset[0][0]) + len(train_dataset[0][1])
-        model = Autoencoder(D_in)
+        model = Autoencoder(D_in, num_classes)
 
         if args.use_trained_models:
             logging.info(f"Loading trained model {client_idx}")
@@ -220,6 +227,7 @@ def run(args, device):
             logging.info(f"Best loss: {best_loss:.4f}")
             model = best_model
 
+            # TODO: the number of samples we get should be similar to the num samples of the original data
             model_proxy_dataset = _sample_proxy_dataset(best_model, 10_000, device)
             evaluate_downstream_task(
                 id_str,
@@ -227,6 +235,7 @@ def run(args, device):
                     model_proxy_dataset, batch_size=test_dataloader.batch_size
                 ),
                 test_dataloader,
+                num_classes,
                 device,
             )
 

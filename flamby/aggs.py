@@ -79,6 +79,7 @@ def evaluate_all_aggregations(
         "downstream_test_accuracy": -1,
     }
 
+    # TODO: fix weighted averaging
     if False:
         wavg_performance = weighted_averaging(
             testset,
@@ -128,6 +129,7 @@ def evaluate_all_aggregations(
         test_loader=testset,
         downstream_test_loader=test_loader,
         proxy_dataset_tensor=proxy_dataset,
+        num_labels=num_labels,
         device=device,
     )
 
@@ -135,6 +137,7 @@ def evaluate_all_aggregations(
         test_loader=test_loader,
         proxy_latents_tensor=proxy_latents,
         proxy_dataset_tensor=proxy_dataset,
+        num_labels=num_labels,
         device=device,
     )
 
