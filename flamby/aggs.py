@@ -2,7 +2,7 @@ import torch
 from aggregators import common, distillation, neural
 from aggregators.average import averaging
 from aggregators.linear import linear_mapping
-from typing import Union
+from params.visualization import VisualizationParameters
 
 import wandb
 
@@ -49,6 +49,7 @@ def evaluate_all_aggregations(
     metric,
     device,
     trainable_agg_params,
+    visualization_parameters: VisualizationParameters,
     require_argmax=False,
 ):
     # elems: (batch_size, input_dim)
@@ -131,6 +132,7 @@ def evaluate_all_aggregations(
         proxy_latents_tensor=proxy_latents,
         proxy_dataset_tensor=proxy_dataset,
         num_labels=num_labels,
+        visualization_parameters=visualization_parameters,
         device=device,
     )
 

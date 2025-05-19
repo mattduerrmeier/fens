@@ -348,7 +348,7 @@ def evaluate_downstream_task(
                 f"{id}/epoch": epoch,
             }
         )
-        print(
+        logging.info(
             f"Downstream task training: epoch {epoch}, "
             f"train loss: {train_loss:.2f}, train acc: {100 * train_accuracy:.2f}%, "
             f"test loss: {test_loss:.2f}, test acc: {100 * test_accuracy:.2f}%"

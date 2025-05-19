@@ -1,8 +1,10 @@
+import logging
+
 import torch
+from autoencoder import visualization
 from autoencoder.model import Decoder
+from params.visualization import VisualizationParameters
 from train import evaluate_downstream_task
-import matplotlib.pyplot as plt
-import numpy as np
 
 from .common import AggregatorResult, sample_proxy_dataset
 
@@ -13,8 +15,11 @@ def run_and_evaluate(
     proxy_latents_tensor: torch.Tensor,
     proxy_dataset_tensor: torch.Tensor,
     num_labels: int,
+    visualization_parameters: VisualizationParameters,
     device: torch.device,
 ) -> AggregatorResult:
+    logging.info("Teaching student model")
+
     if num_labels > 2:
         x_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, :-num_labels]
         y_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, -num_labels:]
@@ -37,16 +42,30 @@ def run_and_evaluate(
         device=device,
     )
 
-    # get loss
     _, downstream_proxy_data = sample_proxy_dataset(
         [best_student_model], 10_000, device
     )
 
+    if visualization_parameters.supports_visualization:
+        logging.info("Visualizing samples from student model")
+        visualization.visualize_from_dataset(
+            visualization_parameters.results_path / "aggregator-samples.png",
+            _convert_downstream_data_to_dataset(downstream_proxy_data, num_labels),
+        )
+
+        logging.info("Visualizing latent space of student model")
+        visualization.visualize_latent(
+            visualization_parameters.results_path / "aggregator-latent.png",
+            best_student_model,
+            device,
+        )
+    else:
+        logging.info("Skip visualization of student model as dataset is not visual")
+
+    logging.info("Evaluating student model on downstream task")
     downstream_train_accuracy, downstream_test_accuracy = evaluate_on_downstream_task(
         downstream_proxy_data, test_loader, num_labels, device
     )
-
-    visualize(downstream_proxy_data, num_labels)
 
     return {
         "mse_loss": -1,
@@ -114,12 +133,12 @@ def train_student(
 
             total_loss += loss.item()
 
-        print(f"Epoch: {epoch} Loss: {total_loss / batches:.3f}")
+        logging.info(f"Epoch: {epoch} Loss: {total_loss / batches:.3f}")
 
     return student_model
 
 
-def convert_downstream_data_to_dataset(
+def _convert_downstream_data_to_dataset(
     downstream_dataset: torch.Tensor, num_labels: int
 ) -> torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]]:
     downstream_dataset = downstream_dataset.flatten(end_dim=1)
@@ -147,7 +166,7 @@ def evaluate_on_downstream_task(
     num_labels: int,
     device: torch.device,
 ) -> tuple[float, float]:
-    downstream_dataset = convert_downstream_data_to_dataset(
+    downstream_dataset = _convert_downstream_data_to_dataset(
         downstream_dataset_tensor, num_labels
     )
 
@@ -165,83 +184,3 @@ def evaluate_on_downstream_task(
     )
 
     return train_accuracy, test_accuracy
-
-
-def render_image(image_tensor: torch.Tensor, label: torch.Tensor, axis) -> None:
-    image_tensor = image_tensor.detach().cpu()
-
-    axis.set_title(f"label: {label.item()}")
-    axis.imshow(image_tensor.reshape(28, 28, 1), cmap="gray")
-
-
-def visualize_from_dataset(
-    downstream_dataset: torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]],
-) -> None:
-    fig, axes = plt.subplots(10, 10, figsize=(15, 15))
-
-    loader = torch.utils.data.DataLoader(downstream_dataset, batch_size=1, shuffle=True)
-    loader_iter = iter(loader)
-
-    for (image_tensor, label), axis in zip(loader_iter, axes.flatten()):
-        render_image(image_tensor, label, axis)
-
-    plt.title("VAE Latent Space")
-    plt.savefig("out/mnist-synthetic.png")
-
-
-def visualize(
-    dataset_tensor: torch.Tensor,
-    num_labels: int,
-) -> None:
-    downstream_dataset = convert_downstream_data_to_dataset(dataset_tensor, num_labels)
-
-    fig, axes = plt.subplots(10, 10, figsize=(15, 15))
-
-    loader = torch.utils.data.DataLoader(downstream_dataset, batch_size=1, shuffle=True)
-    loader_iter = iter(loader)
-
-    for (image_tensor, label), axis in zip(loader_iter, axes.flatten()):
-        render_image(image_tensor, label, axis)
-
-    plt.title("VAE Latent Space")
-    plt.savefig("out/mnist-synthetic.png")
-
-
-def visualize_synthetic_data(
-    dataset_tensor: torch.Tensor,
-    num_labels: int,
-    digit_size: int = 28,
-    num_samples: int = 10,
-    scale: float = 1.0,
-    figsize: tuple[float, float] = (15, 15),
-) -> None:
-    downstream_dataset = convert_downstream_data_to_dataset(dataset_tensor, num_labels)
-
-    figure = np.zeros((digit_size * num_samples, digit_size * num_samples))
-
-    grid_x = np.linspace(-scale, scale, num_samples)
-    grid_y = np.linspace(-scale, scale, num_samples)[::-1]
-
-    loader = torch.utils.data.DataLoader(downstream_dataset, batch_size=1, shuffle=True)
-    loader_iter = iter(loader)
-
-    for i, yi in enumerate(grid_y):
-        for j, xi in enumerate(grid_x):
-            image, label = next(loader_iter)
-
-            digit = image.detach().cpu()
-
-            figure[
-                i * digit_size : (i + 1) * digit_size,
-                j * digit_size : (j + 1) * digit_size,
-            ] = digit[0][0]
-
-    plt.figure(figsize=figsize)
-    plt.title("VAE Latent Space")
-
-    plt.xlabel("z [0]")
-    plt.ylabel("z [1]")
-
-    plt.imshow(figure, cmap="gray")
-
-    plt.savefig("out/mnist-synthetic.png")

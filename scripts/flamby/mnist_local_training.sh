@@ -15,14 +15,14 @@ dataset=MNIST
 proxy_frac=0.1
 test_every=1
 # the number of epochs each model trains for; in the paper, says use the FLamby config
-epochs=50
+epochs=100
 
 # these 4 params are used in `evaluate_all_aggregations()` (aggs.py)
 # learning rate and number of epochs for the linear mapping and neural net mapping
 lm_lr=1e-3
-lm_epochs=300
+lm_epochs=1
 nn_lr=5e-5
-nn_epochs=200
+nn_epochs=1
 
 for seed in "${seeds[@]}"; do
     save_dir="mnist/local_training/${dataset}_${seed}_epochs${epochs}"
@@ -44,7 +44,10 @@ for seed in "${seeds[@]}"; do
         --nn_lr "$nn_lr" \
         --nn_epochs "$nn_epochs" \
         --epochs "$epochs" \
-        --disable_wandb
+        --disable_wandb \
+        --use_trained_models  \
+        --trained_models_path results/mnist/local_training/MNIST_89_epochs50
+        # --save_model
 
     end=$(date +%s)
     runtime=$((end - start))

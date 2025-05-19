@@ -8,14 +8,14 @@ root_dir=$PWD
 env_python="$(which python)"
 
 gpu_idx=0
-seeds=(89)
+seeds=(91)
 dataset=FedHeartDisease
 
 # 90/10 split (D1 for training, D2 for aggr)
 proxy_frac=0.1
 test_every=1
 # the number of epochs each model trains for; in the paper, says use the FLamby config
-epochs=200
+epochs=100
 
 # these 4 params are used in `evaluate_all_aggregations()` (aggs.py)
 # learning rate and number of epochs for the linear mapping and neural net mapping

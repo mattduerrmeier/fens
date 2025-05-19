@@ -115,9 +115,9 @@ class Autoencoder(nn.Module):
         self,
         input_dimensions: int,
         num_classes: int,
-        wide_hidden_dimensions: int = 400,
-        narrow_hidden_dimensions: int = 200,
-        latent_dimensions: int = 2,
+        wide_hidden_dimensions: int,
+        narrow_hidden_dimensions: int,
+        latent_dimensions: int,
     ):
         super(Autoencoder, self).__init__()
         self.num_classes = num_classes
@@ -225,9 +225,9 @@ class Decoder(nn.Module):
         self,
         output_dimensions: int,
         num_classes: int,
-        wide_hidden_dimensions: int = 32,
-        narrow_hidden_dimensions: int = 12,
-        latent_dimensions: int = 8,
+        wide_hidden_dimensions: int,
+        narrow_hidden_dimensions: int,
+        latent_dimensions: int,
     ):
         super(Decoder, self).__init__()
         self.latent_dimensions = latent_dimensions

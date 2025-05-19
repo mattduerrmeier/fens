@@ -19,62 +19,38 @@ class Autoencoder(nn.Module):
     def __init__(
         self,
         input_dimensions: int,
-        wide_hidden_dimensions: int = 32,
-        narrow_hidden_dimensions: int = 16,
-        latent_dimensions: int = 8,
+        wide_hidden_dimensions: int = 400,
+        narrow_hidden_dimensions: int = 200,
+        latent_dimensions: int = 2,
     ):
         super(Autoencoder, self).__init__()
 
         self.encoder = nn.Sequential(
             nn.Sequential(
                 nn.Linear(input_dimensions, wide_hidden_dimensions),
-                nn.BatchNorm1d(num_features=wide_hidden_dimensions),
                 nn.ReLU(),
             ),
             nn.Sequential(
                 nn.Linear(wide_hidden_dimensions, narrow_hidden_dimensions),
-                nn.BatchNorm1d(num_features=narrow_hidden_dimensions),
-                nn.ReLU(),
-            ),
-            nn.Sequential(
-                nn.Linear(narrow_hidden_dimensions, narrow_hidden_dimensions),
-                nn.BatchNorm1d(num_features=narrow_hidden_dimensions),
-                nn.ReLU(),
-            ),
-            nn.Sequential(
-                nn.Linear(narrow_hidden_dimensions, latent_dimensions),
-                nn.BatchNorm1d(num_features=latent_dimensions),
                 nn.ReLU(),
             ),
         )
 
-        self.latent_layer_mean = nn.Linear(latent_dimensions, latent_dimensions)
-        self.latent_layer_log_variance = nn.Linear(latent_dimensions, latent_dimensions)
+        self.latent_layer_mean = nn.Linear(narrow_hidden_dimensions, latent_dimensions)
+        self.latent_layer_log_variance = nn.Linear(narrow_hidden_dimensions, latent_dimensions)
 
         self.decoder = nn.Sequential(
             nn.Sequential(
-                nn.Linear(latent_dimensions, latent_dimensions),
-                nn.BatchNorm1d(latent_dimensions),
-                nn.ReLU(),
-            ),
-            nn.Sequential(
                 nn.Linear(latent_dimensions, narrow_hidden_dimensions),
-                nn.BatchNorm1d(narrow_hidden_dimensions),
-                nn.ReLU(),
-            ),
-            nn.Sequential(
-                nn.Linear(narrow_hidden_dimensions, narrow_hidden_dimensions),
-                nn.BatchNorm1d(num_features=narrow_hidden_dimensions),
                 nn.ReLU(),
             ),
             nn.Sequential(
                 nn.Linear(narrow_hidden_dimensions, wide_hidden_dimensions),
-                nn.BatchNorm1d(num_features=wide_hidden_dimensions),
                 nn.ReLU(),
             ),
             nn.Sequential(
                 nn.Linear(wide_hidden_dimensions, input_dimensions),
-                nn.BatchNorm1d(num_features=input_dimensions),
+                nn.Sigmoid()
             ),
         )
 
@@ -92,9 +68,9 @@ class Autoencoder(nn.Module):
             return mean
 
         # create new samples based on the parameters predicted by the encoder
-        std = log_variance.mul(0.5).exp_()
+        std = log_variance.mul(0.5).exp()
         eps = torch.randn_like(std)
-        return eps.mul(std).add_(mean)
+        return eps.mul(std).add(mean)
 
     def decode(self, reparameterized_latent_representation: torch.Tensor):
         return self.decoder(reparameterized_latent_representation)

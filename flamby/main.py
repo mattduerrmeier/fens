@@ -1,15 +1,18 @@
-from args import parse_arguments
-import torch
-import os
 import logging
-import wandb
-import pandas as pd
+import os
 
-from utils import prepare_client_datasets, determine_label_distribution, load_dataset
-from train import train_and_evaluate, evaluate, evaluate_downstream_task
+import pandas as pd
+import torch
 from aggs import evaluate_all_aggregations
-from autoencoder.model import StolenAutoencoder, Autoencoder, MseKldLoss
+from autoencoder.model import Autoencoder, MseKldLoss
+from autoencoder.visualization import visualize_from_dataset, visualize_latent
 from mnist_dataset import MNISTDataset
+from params.visualization import get_visualization_parameters
+from train import evaluate, evaluate_downstream_task, train_and_evaluate
+from utils import determine_label_distribution, load_dataset, prepare_client_datasets
+
+import wandb
+from args import parse_arguments
 
 
 def get_parameters(dataset):
@@ -18,16 +21,17 @@ def get_parameters(dataset):
         from flamby.datasets.fed_heart_disease import (
             BATCH_SIZE,
             LR,
-            NUM_EPOCHS_POOLED,
             NUM_CLIENTS,
-            Optimizer,
-            FedHeartDisease as FedDataset,
+            NUM_EPOCHS_POOLED,
         )
+        from flamby.datasets.fed_heart_disease import FedHeartDisease as FedDataset
+        from flamby.datasets.fed_heart_disease import Optimizer
 
         collate_fn = None
-        from metric import metric_FHD as metric
-        from models import Baseline_FHD as Baseline
         from loss import BaselineLoss_FHD as BaselineLoss
+        from metric import metric_FHD as metric
+
+        from models import Baseline_FHD as Baseline
 
         BATCH_SIZE = 32
         NUM_CLASSES = 2
@@ -44,15 +48,13 @@ def get_parameters(dataset):
         from flamby.datasets.fed_camelyon16 import (
             BATCH_SIZE,
             LR,
-            NUM_EPOCHS_POOLED,
             NUM_CLIENTS,
-            Optimizer,
-            collate_fn,
+            NUM_EPOCHS_POOLED,
             Baseline,
             BaselineLoss,
-            metric,
-            FedCamelyon16 as FedDataset,
         )
+        from flamby.datasets.fed_camelyon16 import FedCamelyon16 as FedDataset
+        from flamby.datasets.fed_camelyon16 import Optimizer, collate_fn, metric
 
         NUM_CLASSES = 2
         require_argmax = False
@@ -61,13 +63,13 @@ def get_parameters(dataset):
         from flamby.datasets.fed_isic2019 import (
             BATCH_SIZE,
             LR,
-            NUM_EPOCHS_POOLED,
             NUM_CLIENTS,
-            Optimizer,
+            NUM_EPOCHS_POOLED,
             Baseline,
             BaselineLoss,
-            FedIsic2019 as FedDataset,
         )
+        from flamby.datasets.fed_isic2019 import FedIsic2019 as FedDataset
+        from flamby.datasets.fed_isic2019 import Optimizer
 
         collate_fn = None
         from metric import metric_FISIC as metric
@@ -141,6 +143,7 @@ def run(args, device):
     )
 
     params = get_parameters(args.dataset)
+    visualization_parameters = get_visualization_parameters(args)
 
     if args.epochs != -1:
         params["num_epochs"] = args.epochs
@@ -166,7 +169,7 @@ def run(args, device):
         test_dataset,
         batch_size=params["batch_size"],
         shuffle=False,
-        num_workers=4,
+        num_workers=0,
         collate_fn=params["collate_fn"],
     )
 
@@ -240,14 +243,27 @@ def run(args, device):
             logging.info(f"==> Best Loss for VAE {client_idx + 1}: {best_loss:.4f}")
             model = best_model
 
-            # TODO: the number of samples we get should be similar to the num samples of the original data
-            model_proxy_dataset = _sample_proxy_dataset(best_model, 10_000, device)
+            model_proxy_dataset = _sample_proxy_dataset(model, 10_000, device)
 
-            if args.dataset == "MNIST":
-                from aggregators import distillation
+            if visualization_parameters.supports_visualization:
+                logging.info("Visualizing samples from client model")
+                visualize_from_dataset(
+                    visualization_parameters.results_path
+                    / f"client-{client_idx}-samples.png",
+                    model_proxy_dataset,
+                )
 
-                print("Saving visualization...")
-                distillation.visualize_from_dataset(model_proxy_dataset, id_str)
+                logging.info("Visualizing latent space of student model")
+                visualize_latent(
+                    visualization_parameters.results_path
+                    / f"client-{client_idx}-latent.png",
+                    model,
+                    device,
+                )
+            else:
+                logging.info(
+                    "Skip visualization of client model as dataset is not visual"
+                )
 
             print(f"Evaluating VAE {client_idx + 1} on downstream task:")
             evaluate_downstream_task(
@@ -336,6 +352,7 @@ def run(args, device):
         mse_metric,
         device,
         trainable_agg_params,
+        visualization_parameters=visualization_parameters,
         require_argmax=params["require_argmax"],
     )
 
