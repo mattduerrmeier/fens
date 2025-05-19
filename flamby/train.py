@@ -178,6 +178,8 @@ def train_and_evaluate(
         if test_loss < best_loss:
             best_loss = test_loss
             # store the best model by making a copy
+
+            print(f"found best model in epoch {epoch}")
             best_model = copy.deepcopy(model)
 
         logging.info(

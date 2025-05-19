@@ -236,6 +236,12 @@ def run(args, device):
 
             # TODO: the number of samples we get should be similar to the num samples of the original data
             model_proxy_dataset = _sample_proxy_dataset(best_model, 10_000, device)
+
+            from aggregators import distillation
+            print("visualizing")
+            distillation.visualize_from_dataset(model_proxy_dataset, num_classes)
+
+            print("testing on downstream task")
             evaluate_downstream_task(
                 id_str,
                 torch.utils.data.DataLoader(
