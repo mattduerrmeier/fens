@@ -3,6 +3,7 @@ from aggregators import common, distillation, neural
 from aggregators.average import averaging
 from aggregators.linear import linear_mapping
 from params.visualization import VisualizationParameters
+from aggregators.weighted_average import weighted_averaging
 
 import wandb
 
@@ -45,6 +46,7 @@ def evaluate_all_aggregations(
     train_loader,
     test_loader,
     models,
+    label_dists,
     num_labels,
     metric,
     device,
@@ -81,18 +83,20 @@ def evaluate_all_aggregations(
         "downstream_test_accuracy": -1,
     }
 
-    # TODO: fix weighted averaging
-    if False:
-        print("Evaluating ensemble: weighted average")
-        wavg_performance = weighted_averaging(
-            testset,
-            metric,
-            len(models),
-            len(num_labels[0]),
-            num_labels,
-            require_argmax,
-        )
-        results["wavg"] = wavg_performance
+    print("Evaluating ensemble: weighted average")
+    wavg_performance = weighted_averaging(
+        testset,
+        metric,
+        len(models),
+        num_labels,
+        label_dists,
+        require_argmax,
+    )
+    results["wavg"] = {
+        "mse_loss": wavg_performance,
+        "downstream_train_accuracy": -1,
+        "downstream_test_accuracy": -1,
+    }
 
     print("Evaluating ensemble: linear mapping")
     lm_performance = linear_mapping(

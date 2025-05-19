@@ -1,5 +1,4 @@
 import typing
-
 import torch
 from autoencoder.model import Autoencoder, Decoder
 
@@ -21,7 +20,6 @@ def sample_proxy_dataset(
     for model in models:
         model.eval()
         latent = model.sample_latent(samples)
-        
         latent = latent.to(device)
         synthetic_x, synthetic_y = model.sample_from_latent(
             latent, requires_argmax=False

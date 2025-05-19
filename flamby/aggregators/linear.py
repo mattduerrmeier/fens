@@ -1,7 +1,5 @@
 import logging
-
 import torch
-
 import wandb
 
 
@@ -25,7 +23,7 @@ def run_forward_linearagg(
     with torch.no_grad():
         for out, data in testset:
             out = (out.permute(*torch.arange(out.ndim - 1, -1, -1)) @ weights) + bias
-            out = out.permute(*torch.arange(outx.ndim - 1, -1, -1))
+            out = out.permute(*torch.arange(out.ndim - 1, -1, -1))
 
             loss = criterion(out, data)
 
@@ -55,8 +53,8 @@ def linear_mapping(
     wandb.define_metric(f"{id_str}/*", step_metric=f"{id_str}/epoch")
 
     weights = torch.ones(total_clients, requires_grad=True, dtype=torch.float32)
-    logging.info("Size of weights: {}".format(weights.size()))
     bias = torch.tensor([1.0], requires_grad=True, dtype=torch.float32)
+    logging.info("Size of weights: {}".format(weights.size()))
     logging.info("Size of bias: {}".format(bias.size()))
 
     lr = agg_params["lm_lr"]
@@ -78,7 +76,7 @@ def linear_mapping(
         for out, data in train_dataset:
             optimizer.zero_grad()
             out = (out.permute(*torch.arange(out.ndim - 1, -1, -1)) @ weights) + bias
-            out = out.permute(*torch.arange(outx.ndim - 1, -1, -1))
+            out = out.permute(*torch.arange(out.ndim - 1, -1, -1))
 
             # target = y.reshape(y_pred.shape) if not require_argmax else y
             loss = criterion(out, data)

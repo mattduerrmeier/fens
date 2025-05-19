@@ -6,34 +6,21 @@ def weighted_averaging(
     dataset, metric, total_clients, num_classes, label_dists, require_argmax=False
 ):
     # Get weights from labels
-    my_labels_tensor = torch.tensor(label_dists)  # (num_clients, num_classes)
-    label_sum_tensor = my_labels_tensor.sum(dim=0)  # (num_classes)
-    my_weights_tensor = (
-        my_labels_tensor / label_sum_tensor
-    )  # (num_clients, num_classes)
+    labels_tensor = torch.tensor(label_dists)
+    label_sum_tensor = labels_tensor.sum(dim=0)
+    weighted_label_tensor = labels_tensor / label_sum_tensor
 
     inputs = []
     outputs = []
     for out, data in dataset:
-        local_weight = my_weights_tensor[:, labels.int()]
-        out = out * local_weight
+        if num_classes > 2:
+            labels = out[:, :, -num_classes:].argmax(dim=-1)
+        else:
+            labels = out[:, :, -1]
+
+        local_weight = torch.take_along_dim(weighted_label_tensor, labels.long(), dim=1)
+        out = out * local_weight.unsqueeze(dim=-1)
         out = torch.sum(out, dim=0)
-        # if require_argmax:
-        #     # out: (batch_size, total_clients * num_classes)
-        #     out = torch.reshape(out, (-1, total_clients, num_classes))
-        #     out = out * my_weights_tensor
-        #     y_pred = torch.sum(out, dim=1).argmax(dim=1)
-        # else:
-        #     # out: (batch_size, total_clients)
-        #     out = torch.sigmoid(out)
-        #     out_complement = 1 - out
-        #     out_all = torch.stack(
-        #         (out_complement, out), dim=2
-        #     )  # (batch_size, total_clients, 2)
-        #     out = out_all * my_weights_tensor  # (batch_size, total_clients, 2)
-        #     out = torch.sum(out, dim=1)
-        #     out = torch.softmax(out, dim=1)
-        #     out = torch.log(out[:, 1] / out[:, 0])
 
         inputs.append(data)
         outputs.append(out)

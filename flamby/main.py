@@ -175,6 +175,7 @@ def run(args, device):
 
     trained_models: list[Autoencoder] = []
     proxy_datasets: list[torch.utils.data.Dataset] = []
+    labels_dists: list[list[int]] = []
 
     if not os.path.exists(args.result_dir):
         os.makedirs(args.result_dir)
@@ -205,6 +206,7 @@ def run(args, device):
             collate_fn=params["collate_fn"],
         )
         proxy_datasets.append(proxy_dataset)
+        labels_dists.append(client_label_distribution)
 
         torch.manual_seed(args.seed + client_idx)
 
@@ -265,7 +267,7 @@ def run(args, device):
                     "Skip visualization of client model as dataset is not visual"
                 )
 
-            print(f"Evaluating VAE {client_idx + 1} on downstream task:")
+            print(f"Evaluating VAE {client_idx + 1} on downstream task")
             evaluate_downstream_task(
                 id_str,
                 torch.utils.data.DataLoader(
@@ -348,6 +350,7 @@ def run(args, device):
         proxy_dataloader,
         test_dataloader,
         trained_models,
+        labels_dists,
         num_labels,
         mse_metric,
         device,
