@@ -1,7 +1,8 @@
-*/.DS_Store
-.DS_Store
-*/__pycache__
-*__pycache__
 .vscode
-results
+
+**/.DS_Store
+**/__pycache__
+
 **/wandb/
+results
+data/
