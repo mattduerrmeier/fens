@@ -230,7 +230,7 @@ class Decoder(nn.Module):
 class MseKldLoss(nn.Module):
     def __init__(self, num_classes, target_coeff=2):
         super().__init__()
-        self._mse_loss = nn.MSELoss()
+        self._mse_loss = nn.MSELoss(reduction="sum")
         self.num_classes = num_classes if num_classes > 2 else 1
         self.target_coeff = target_coeff
 

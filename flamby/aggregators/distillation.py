@@ -74,7 +74,7 @@ def train_student(
 
     batches = len(proxy_dataset) // batch_size
 
-    mse_loss = torch.nn.MSELoss()
+    mse_loss = torch.nn.MSELoss(reduction="sum")
 
     def adapted_loss(
         actual_output: tuple[torch.Tensor, torch.Tensor],
