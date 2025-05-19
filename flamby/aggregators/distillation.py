@@ -31,14 +31,16 @@ def run_and_evaluate(
     best_student_model = train_student(
         model_config,
         proxy_dataset,
-        epochs=50,
+        epochs=10,
         batch_size=64,
         num_labels=num_labels,
         device=device,
     )
 
     # get loss
-    _, downstream_proxy_data = sample_proxy_dataset([best_student_model], 1000, device)
+    _, downstream_proxy_data = sample_proxy_dataset(
+        [best_student_model], 10_000, device
+    )
 
     downstream_train_accuracy, downstream_test_accuracy = evaluate_on_downstream_task(
         downstream_proxy_data, test_loader, num_labels, device
