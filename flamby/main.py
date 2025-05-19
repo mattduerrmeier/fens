@@ -8,7 +8,7 @@ import pandas as pd
 from utils import prepare_client_datasets, determine_label_distribution, load_dataset
 from train import train_and_evaluate, evaluate, evaluate_downstream_task
 from aggs import evaluate_all_aggregations
-from autoencoder.model import Autoencoder, MseKldLoss
+from autoencoder.model import StolenAutoencoder, Autoencoder, MseKldLoss
 from mnist_dataset import MNISTDataset
 
 
