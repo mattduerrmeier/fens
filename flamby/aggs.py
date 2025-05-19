@@ -70,6 +70,7 @@ def evaluate_all_aggregations(
 
     results = {}
 
+    print("Evaluating ensemble: average")
     avg_performance = averaging(
         testset, metric, len(models), num_labels, require_argmax
     )
@@ -81,6 +82,7 @@ def evaluate_all_aggregations(
 
     # TODO: fix weighted averaging
     if False:
+        print("Evaluating ensemble: weighted average")
         wavg_performance = weighted_averaging(
             testset,
             metric,
@@ -91,19 +93,7 @@ def evaluate_all_aggregations(
         )
         results["wavg"] = wavg_performance
 
-    if False:
-        voting_performance = polychotomous_voting(
-            testset,
-            metric,
-            len(models),
-            num_labels,
-            models,
-            device,
-            trainset,
-            require_argmax,
-        )
-        results["voting"] = voting_performance
-
+    print("Evaluating ensemble: linear mapping")
     lm_performance = linear_mapping(
         testset,
         metric,
@@ -123,6 +113,7 @@ def evaluate_all_aggregations(
         models=models, samples=20_000, device=device
     )
 
+    print("Evaluating ensemble: mlp")
     results["neural_network"] = neural.run_and_evaluate(
         agg_params=trainable_agg_params,
         train_loader=trainset,
@@ -133,6 +124,7 @@ def evaluate_all_aggregations(
         device=device,
     )
 
+    print("Evaluating ensemble: distillation")
     results["distillation"] = distillation.run_and_evaluate(
         model_config=trainable_agg_params["model_config"],
         test_loader=test_loader,

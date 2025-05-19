@@ -34,6 +34,12 @@ def get_parameters(dataset):
         NUM_CLIENTS = 3
         require_argmax = False
         from models import SmallNN_FHD as SmallNN
+
+        model_config = {
+            "wide_hidden_dimensions": 12,
+            "narrow_hidden_dimensions": 8,
+            "latent_dimensions": 6,
+        }
     elif dataset == "FedCamelyon16":
         from flamby.datasets.fed_camelyon16 import (
             BATCH_SIZE,
@@ -86,7 +92,7 @@ def get_parameters(dataset):
         model_config = {
             "wide_hidden_dimensions": 512,
             "narrow_hidden_dimensions": 256,
-            "latent_dimensions": 84,
+            "latent_dimensions": 2,
         }
         from models import SmallNN_MNIST as SmallNN
     else:
@@ -147,7 +153,7 @@ def run(args, device):
     dataset = load_dataset(dataset_class)
     label_distribution: list[int] = determine_label_distribution(dataset, num_classes)
     logging.info(
-        "Training on dataset with overall label distribution of: ", label_distribution
+        f"Training on dataset with overall label distribution of: {label_distribution}"
     )
 
     client_datasets, test_dataset = prepare_client_datasets(
@@ -231,17 +237,19 @@ def run(args, device):
                 params["num_epochs"],
                 device,
             )
-            logging.info(f"Best loss: {best_loss:.4f}")
+            logging.info(f"==> Best Loss for VAE {client_idx + 1}: {best_loss:.4f}")
             model = best_model
 
             # TODO: the number of samples we get should be similar to the num samples of the original data
             model_proxy_dataset = _sample_proxy_dataset(best_model, 10_000, device)
 
-            from aggregators import distillation
-            print("visualizing")
-            distillation.visualize_from_dataset(model_proxy_dataset, num_classes)
+            if args.dataset == "MNIST":
+                from aggregators import distillation
 
-            print("testing on downstream task")
+                print("Saving visualization...")
+                distillation.visualize_from_dataset(model_proxy_dataset, id_str)
+
+            print(f"Evaluating VAE {client_idx + 1} on downstream task:")
             evaluate_downstream_task(
                 id_str,
                 torch.utils.data.DataLoader(

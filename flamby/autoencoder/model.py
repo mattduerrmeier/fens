@@ -15,7 +15,14 @@ class LossFunction(typing.Protocol):
 
 
 class StolenAutoencoder(torch.nn.Module):
-    def __init__(self, input_dimensions: int, num_classes: int, wide_hidden_dimensions=400, narrow_hidden_dimensions=200, latent_dimensions: int = 999):
+    def __init__(
+        self,
+        input_dimensions: int,
+        num_classes: int,
+        wide_hidden_dimensions=400,
+        narrow_hidden_dimensions=200,
+        latent_dimensions: int = 999,
+    ):
         super().__init__()
 
         self.num_classes = num_classes
@@ -27,11 +34,13 @@ class StolenAutoencoder(torch.nn.Module):
             torch.nn.ReLU(inplace=True),
         )
 
-        self.to_mean = torch.nn.Linear(narrow_hidden_dimensions, 2)
-        self.to_log_variance = torch.nn.Linear(narrow_hidden_dimensions, 2)
+        self.to_mean = torch.nn.Linear(narrow_hidden_dimensions, latent_dimensions)
+        self.to_log_variance = torch.nn.Linear(
+            narrow_hidden_dimensions, latent_dimensions
+        )
 
         self.decoder = torch.nn.Sequential(
-            torch.nn.Linear(2, narrow_hidden_dimensions),
+            torch.nn.Linear(mean_logvar_dim, narrow_hidden_dimensions),
             torch.nn.ReLU(inplace=True),
             torch.nn.Linear(narrow_hidden_dimensions, wide_hidden_dimensions),
             torch.nn.ReLU(inplace=True),

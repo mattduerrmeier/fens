@@ -24,10 +24,9 @@ def run_forward_linearagg(
 
     with torch.no_grad():
         for out, data in testset:
-            out = (out.T @ weights) + bias
-            out = out.T
+            out = (out.permute(*torch.arange(out.ndim - 1, -1, -1)) @ weights) + bias
+            out = out.permute(*torch.arange(outx.ndim - 1, -1, -1))
 
-            # target = y.reshape(y_pred.shape) if not require_argmax else y
             loss = criterion(out, data)
 
             inputs.append(data)
@@ -78,8 +77,8 @@ def linear_mapping(
         # for out, y in train_dataset:
         for out, data in train_dataset:
             optimizer.zero_grad()
-            out = (out.T @ weights) + bias
-            out = out.T
+            out = (out.permute(*torch.arange(out.ndim - 1, -1, -1)) @ weights) + bias
+            out = out.permute(*torch.arange(outx.ndim - 1, -1, -1))
 
             # target = y.reshape(y_pred.shape) if not require_argmax else y
             loss = criterion(out, data)
