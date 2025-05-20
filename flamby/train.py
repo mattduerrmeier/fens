@@ -44,7 +44,6 @@ def train_and_evaluate_aggs(
 
             # forward pass
             out = model(data)
-            # need to extract the two term to be able to log both of them
             loss = loss_fn(out, target)
 
             # backward pass
@@ -98,7 +97,7 @@ def evaluate_agg(model, loss_fn, test_loader, device):
             out = model(data)
             loss = loss_fn(out, target)
 
-            loss_acc += loss.item()  # * data.size(0)
+            loss_acc += loss.item()
 
     loss_acc /= len(test_loader)
     return loss_acc
@@ -141,9 +140,9 @@ def train_and_evaluate(
 
             # forward pass
             out, mu, logvar = model((data, target))
-            # need to extract the two term to be able to log both of them
 
             concatenated_input = torch.concat((data, target), dim=1)
+            # need to extract the two term to be able to log both of them
             mse_loss, kld_loss = loss_fn(out, concatenated_input, mu, logvar)
             loss = mse_loss + kld_loss
 
@@ -215,7 +214,7 @@ def evaluate(model, loss_fn, test_loader, device):
 
             loss = mse_loss + kld_loss
 
-            loss_acc += loss.item()  # * data.size(0)
+            loss_acc += loss.item()
             mse_acc += mse_loss.item()
             kld_acc += kld_loss.item()
 

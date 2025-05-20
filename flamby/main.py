@@ -307,22 +307,6 @@ def run(args, device):
             wandb.run.summary[f"{id_str}/best_loss"] = test_loss
             client_results[id_str] = test_loss
 
-        # TODO: What do we need the logits for? Do we still need them for Fens?
-        # logits = generate_logits_combined(
-        #     args.dataset,
-        #     trained_models,
-        #     params["fed_dataset"],
-        #     params["num_classes"],
-        #     args.proxy_frac,
-        #     device,
-        #     test_dataloader,
-        #     params["num_clients"],
-        #     params["batch_size"],
-        #     args.seed,
-        #     params["collate_fn"],
-        # )
-        #
-
     proxy_dataloader = torch.utils.data.DataLoader(
         torch.utils.data.ConcatDataset(proxy_datasets),
         batch_size=params["batch_size"],
@@ -331,8 +315,6 @@ def run(args, device):
         collate_fn=params["collate_fn"],
     )
 
-    # NN model must take the vaes as input and blend them
-    # unsure where to train the MLP at this point?
     mse_metric = torch.nn.MSELoss()
 
     trainable_agg_params = {
@@ -348,6 +330,7 @@ def run(args, device):
     }
 
     num_labels = len(label_distribution)
+    # also tests the downstream tasks with the different aggregation schemes
     agg_results = evaluate_all_aggregations(
         proxy_dataloader,
         test_dataloader,
@@ -360,8 +343,6 @@ def run(args, device):
         visualization_parameters=visualization_parameters,
         require_argmax=params["require_argmax"],
     )
-
-    # TODO: train and evaluate the server's MLP, with the different aggregation schemes
 
     # save all results
     # save client results if not loaded from trained models
@@ -376,10 +357,6 @@ def run(args, device):
         client_df.to_csv(
             os.path.join(args.result_dir, "client_results.csv"), index=False
         )
-
-        # save logits
-        # logits_file = os.path.join(args.result_dir, "logits.pth")
-        # torch.save(logits, logits_file, pickle_protocol=2)
 
     # save aggregation results
     all_results = []
