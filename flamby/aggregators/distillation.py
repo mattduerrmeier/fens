@@ -5,12 +5,13 @@ from autoencoder import visualization
 from autoencoder.model import Decoder
 from params.visualization import VisualizationParameters
 from train import evaluate_downstream_task
+import typing
 
 from .common import AggregatorResult, sample_proxy_dataset
 
 
 def run_and_evaluate(
-    model_config: dict[str, int],
+    agg_params: typing.Mapping[str, typing.Any],
     test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
     proxy_latents_tensor: torch.Tensor,
     proxy_dataset_tensor: torch.Tensor,
@@ -34,9 +35,10 @@ def run_and_evaluate(
     )
 
     best_student_model = train_student(
-        model_config,
+        agg_params["model_config"],
         proxy_dataset,
-        epochs=10,
+        epochs=agg_params["distillation_epochs"],
+        lr=agg_params["distillation_lr"],
         batch_size=64,
         num_labels=num_labels,
         device=device,
@@ -80,6 +82,7 @@ def train_student(
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     ],
     epochs: int,
+    lr: float,
     batch_size: int,
     num_labels: int,
     device: torch.device,
@@ -91,7 +94,7 @@ def train_student(
         num_classes=num_labels,
         **model_config,
     ).to(device)
-    optimizer = torch.optim.Adam(student_model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(student_model.parameters(), lr=lr)
 
     batches = len(proxy_dataset) // batch_size
 

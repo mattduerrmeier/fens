@@ -42,6 +42,12 @@ def parse_arguments():
         "--nn_lr", type=float, default=1e-5, help="Neural network agg learning rate"
     )
     parser.add_argument(
+        "--distillation_epochs", type=int, default=10, help="Distillation epochs"
+    )
+    parser.add_argument(
+        "--distillation_lr", type=float, default=1e-3, help="Distillation learning rate"
+    )
+    parser.add_argument(
         "--use_trained_models", action="store_true", help="Use trained models"
     )
     parser.add_argument(

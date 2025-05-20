@@ -340,6 +340,8 @@ def run(args, device):
         "lm_epochs": args.lm_epochs,
         "nn_lr": args.nn_lr,
         "nn_epochs": args.nn_epochs,
+        "distillation_lr": args.distillation_lr,
+        "distillation_epochs": args.distillation_epochs,
         "nn_model": params["nn_model"],
         "criterion": mse_metric,
         "model_config": params["model_config"],

@@ -263,7 +263,7 @@ def evaluate_downstream_task(
     input_dimensions = _determine_dataset_feature_count(loader_train)
 
     model = _DownstreamTaskModel(input_dimensions, num_classes)
-    optimizer = torch.optim.AdamW(model.parameters())
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
     loss_function = torch.nn.CrossEntropyLoss()
     model.to(device)

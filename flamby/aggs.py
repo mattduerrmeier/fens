@@ -131,7 +131,7 @@ def evaluate_all_aggregations(
 
     print("Evaluating ensemble: distillation")
     results["distillation"] = distillation.run_and_evaluate(
-        model_config=trainable_agg_params["model_config"],
+        agg_params=trainable_agg_params,
         test_loader=test_loader,
         proxy_latents_tensor=proxy_latents,
         proxy_dataset_tensor=proxy_dataset,
