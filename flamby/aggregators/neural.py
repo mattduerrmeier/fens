@@ -73,6 +73,9 @@ def evaluate_on_downstream_task(
     device: torch.device,
 ) -> tuple[float, float]:
     proxy_dataset = proxy_dataset.swapaxes(0, 1)
+    proxy_dataset = proxy_dataset.to(device)
+
+    model.to(device)
     downstream_dataset = model(proxy_dataset).detach()
 
     synthetic_x: torch.Tensor

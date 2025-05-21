@@ -53,7 +53,6 @@ def evaluate_all_aggregations(
     device,
     trainable_agg_params,
     visualization_parameters: VisualizationParameters,
-    require_argmax=False,
 ):
     # elems: (batch_size, input_dim)
     # model(elems): (batch_size, output_dim)
@@ -76,7 +75,7 @@ def evaluate_all_aggregations(
 
     print("Evaluating ensemble: average")
     avg_performance = averaging(
-        testset, metric, len(models), num_labels, require_argmax
+        testset, metric, len(models), num_labels,
     )
     results["avg"] = {
         "mse_loss": avg_performance,
@@ -91,7 +90,6 @@ def evaluate_all_aggregations(
         len(models),
         num_labels,
         label_dists,
-        require_argmax,
     )
     results["wavg"] = {
         "mse_loss": wavg_performance,
@@ -107,7 +105,6 @@ def evaluate_all_aggregations(
         num_labels,
         trainset,
         trainable_agg_params,
-        require_argmax,
     )
     results["linear_mapping"] = {
         "mse_loss": lm_performance,
@@ -120,15 +117,18 @@ def evaluate_all_aggregations(
     )
 
     print("Evaluating ensemble: mlp")
-    results["neural_network"] = neural.run_and_evaluate(
-        agg_params=trainable_agg_params,
-        train_loader=trainset,
-        test_loader=testset,
-        downstream_test_loader=test_loader,
-        proxy_dataset_tensor=proxy_dataset,
-        num_labels=num_labels,
-        device=device,
-    )
+    if trainable_agg_params["dataset"] == "FedISIC2019":
+        print("Not enough memory for this dataset! Skipping this evaluation.")
+    else:
+        results["neural_network"] = neural.run_and_evaluate(
+            agg_params=trainable_agg_params,
+            train_loader=trainset,
+            test_loader=testset,
+            downstream_test_loader=test_loader,
+            proxy_dataset_tensor=proxy_dataset,
+            num_labels=num_labels,
+            device=device,
+        )
 
     print("Evaluating ensemble: distillation")
     results["distillation"] = distillation.run_and_evaluate(

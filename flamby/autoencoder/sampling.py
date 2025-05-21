@@ -16,10 +16,19 @@ def sample_proxy_dataset_tensor(
     for model in models:
         model.eval()
         latent = model.sample_latent(samples)
-        latent = latent.to(device)
-        synthetic_x, synthetic_y = model.sample_from_latent(
-            latent, requires_argmax=False
-        )
+
+        prev_idx = 0
+        synthetic_x, synthetic_y = [], []
+
+        for next_idx in range(samples//10, samples+1, samples//10):
+            t = latent[prev_idx:next_idx].to(device)
+            prev_idx = next_idx
+            synth_x, synth_y = model.sample_from_latent(t, requires_argmax=False)
+            synthetic_x.append(synth_x.detach().cpu())
+            synthetic_y.append(synth_y.detach().cpu())
+
+        synthetic_x = torch.cat(synthetic_x)
+        synthetic_y = torch.cat(synthetic_y)
 
         latents.append(latent)
         outputs.append(torch.cat((synthetic_x.detach(), synthetic_y.detach()), dim=1))

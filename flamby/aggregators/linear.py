@@ -78,15 +78,11 @@ def linear_mapping(
             out = (out.permute(*torch.arange(out.ndim - 1, -1, -1)) @ weights) + bias
             out = out.permute(*torch.arange(out.ndim - 1, -1, -1))
 
-            # target = y.reshape(y_pred.shape) if not require_argmax else y
             loss = criterion(out, data)
             loss.backward()
             optimizer.step()
 
             epoch_loss += loss.detach().cpu().item()
-
-            if require_argmax:
-                y_pred = y_pred.argmax(dim=1)
 
             inputs.append(data)
             outputs.append(out.detach().cpu())

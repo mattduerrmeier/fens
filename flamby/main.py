@@ -37,7 +37,6 @@ def get_parameters(dataset):
         BATCH_SIZE = 32
         NUM_CLASSES = 2
         NUM_CLIENTS = 3
-        require_argmax = False
         from models import SmallNN_FHD as SmallNN
 
         model_config = {
@@ -58,7 +57,6 @@ def get_parameters(dataset):
         from flamby.datasets.fed_camelyon16 import Optimizer, collate_fn, metric
 
         NUM_CLASSES = 2
-        require_argmax = False
         from models import SmallNN_FCAM as SmallNN
     elif dataset == "FedISIC2019":
         from flamby.datasets.fed_isic2019 import (
@@ -69,20 +67,25 @@ def get_parameters(dataset):
             Baseline,
             BaselineLoss,
         )
-        from flamby.datasets.fed_isic2019 import FedIsic2019 as FedDataset
+        from fed_isic_dataset import FedIsicCustom as FedDataset
+        # from flamby.datasets.fed_isic2019 import FedIsic2019 as FedDataset
         from flamby.datasets.fed_isic2019 import Optimizer
 
         collate_fn = None
         from metric import metric_FISIC as metric
 
         NUM_CLASSES = 8
-        require_argmax = True
+        model_config = {
+            "wide_hidden_dimensions": 512,
+            "narrow_hidden_dimensions": 256,
+            "latent_dimensions": 2,
+        }
         from models import SmallNN_FISIC as SmallNN
     elif dataset == "MNIST":
         BATCH_SIZE = 128
         LR = 1e-4
         NUM_EPOCHS_POOLED = 5
-        NUM_CLIENTS = 2
+        NUM_CLIENTS = 1
         Optimizer = torch.optim.Adam
         collate_fn = None
         Baseline = None
@@ -91,7 +94,6 @@ def get_parameters(dataset):
         FedDataset = MNISTDataset
 
         NUM_CLASSES = 10
-        require_argmax = False
         model_config = {
             "wide_hidden_dimensions": 512,
             "narrow_hidden_dimensions": 256,
@@ -113,9 +115,8 @@ def get_parameters(dataset):
         "baseline": Baseline,
         "baseline_loss": BaselineLoss,
         "metric": metric,
-        "require_argmax": require_argmax,
         "nn_model": lambda: SmallNN(NUM_CLIENTS),
-        "model_config": model_config,  # empty config for all but MNIST!
+        "model_config": model_config,
     }
 
     return params
@@ -322,6 +323,7 @@ def run(args, device):
     mse_metric = torch.nn.MSELoss()
 
     trainable_agg_params = {
+        "dataset": args.dataset,
         "lm_lr": args.lm_lr,
         "lm_epochs": args.lm_epochs,
         "nn_lr": args.nn_lr,
@@ -344,7 +346,6 @@ def run(args, device):
         device,
         trainable_agg_params,
         visualization_parameters=visualization_parameters,
-        require_argmax=params["require_argmax"],
     )
 
     # save all results

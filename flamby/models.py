@@ -13,15 +13,15 @@ class Baseline_FHD(nn.Module):
 
 
 class SmallNN_FISIC(nn.Module):
-    def __init__(self):
+    def __init__(self, num_clients: int):
         super().__init__()
-        d = 4
-        total_clients = 6
-        num_classes = 8
-        self.fc1 = nn.Linear(total_clients * num_classes, total_clients * d)
-        self.fc2 = nn.Linear(total_clients * d, num_classes)
+        d = 2
+        feature_size = 200 * 200 * 3 + 8
+        self.fc1 = nn.Linear(num_clients * feature_size, feature_size * num_clients * d)
+        self.fc2 = nn.Linear(num_clients * d * feature_size, feature_size)
 
     def forward(self, x):
+        x.flatten(start_dim=1)
         x = self.fc1(x)
         x = F.relu(x)
         x = self.fc2(x)
