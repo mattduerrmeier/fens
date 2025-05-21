@@ -2,19 +2,16 @@ import numpy as np
 import pandas as pd
 import torch
 from components import encoders, preprocessing
-from models.autoencoder import Autoencoder, Decoder
 from sklearn.metrics import accuracy_score
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset, TensorDataset
+from models.autoencoder import Autoencoder, Decoder
 
 type FeatureTargetEntry = tuple[torch.Tensor, torch.Tensor]
 
-from tqdm import tqdm
 
-
-from flamby.datasets.fed_heart_disease import (
-    FedHeartDisease as FedHeartDataset,
-)
+from flamby.datasets.fed_heart_disease import \
+    FedHeartDisease as FedHeartDataset
 
 
 class MseKldLoss(nn.Module):
@@ -102,7 +99,7 @@ def train_teacher(
 
     model.train()
 
-    for epoch in tqdm(range(epochs)):
+    for epoch in range(epochs):
         optimizer.zero_grad()
 
         total_loss = 0.0
@@ -173,12 +170,12 @@ def merge(tensors: list[torch.Tensor] | tuple[torch.Tensor, ...]) -> torch.Tenso
 
 
 class EvaluatorModel(nn.Module):
-    def __init__(self, input_dimensions: int):
+    def __init__(self, input_dimensions: int, output_dimensions: int):
         super(EvaluatorModel, self).__init__()
         self.fc1 = nn.Linear(input_dimensions, 64)
         self.fc2 = nn.Linear(64, 128)
         self.fc3 = nn.Linear(128, 256)
-        self.fc4 = nn.Linear(256, 2)
+        self.fc4 = nn.Linear(256, output_dimensions)
         self.act = nn.LeakyReLU()
         self.dropout = nn.Dropout(0.1)
 
@@ -200,7 +197,17 @@ def _run_evaluator_model(
     features_train, targets_train = _load_dataset_as_tensor(dataset_train)
     features_test, targets_test = _load_dataset_as_tensor(dataset_test)
 
-    model = EvaluatorModel(input_dimensions)
+    label_dim = targets_train.shape[1]
+
+    if label_dim > 1:
+        targets_train = targets_train.argmax(dim=1).unsqueeze(dim=1)
+        targets_test = targets_test.argmax(dim=1).unsqueeze(dim=1)
+
+        output_dim: int = label_dim
+    else:
+        output_dim: int = int(targets_train.max().item()) + 1
+
+    model = EvaluatorModel(input_dimensions, output_dim)
     optimizer = optim.AdamW(model.parameters())
 
     loss_function = nn.CrossEntropyLoss()
@@ -259,41 +266,6 @@ def _evaluate_decoder(
     )
 
 
-def main():
-    dataset = FedHeartDataset(normalize=True)
-
-    encoded_dataset = TensorDataset(*list(torch.tensor(it) for it in dataset.features))
-
-    normalized_dataset = FedHeartDataset(normalize=True)
-    print(len(normalized_dataset.features))
-    print(normalized_dataset.features[0])
-
-    for i in range(5):
-        entry_features, entry_target = dataset[i]
-        print(f"#{i}", entry_features)
-
-    for i in range(5):
-        entry_features = encoded_dataset[i]
-        print(f"#{i}", entry_features)
-
-    for i in range(5):
-        entry_features, entry_target = normalized_dataset[i]
-        print(f"#{i}", entry_features)
-
-
-def _main():
-    dataset_train = FedHeartDataset(train=True)
-    dataset_test = FedHeartDataset(train=False)
-
-    for i in range(5):
-        entry_features, entry_target = dataset_train[i]
-        print(f"#{i}", entry_features)
-
-    for i in range(5):
-        entry_features, entry_target = dataset_test[i]
-        print(f"#{i}", entry_features)
-
-
 def main(
     *,
     train_test_split: float = 0.8,
@@ -303,23 +275,25 @@ def main(
 
     # dataset_train = FedHeartDataset(train=True)
     # dataset_test = FedHeartDataset(train=False)
-
     dataset = FedHeartDataset()
+
     dataset_train, dataset_test = torch.utils.data.random_split(dataset, (0.8, 0.2))
 
     dataset_train_complete = _load_dataset_as_tensor(dataset_train)
     dataset_train_size = dataset_train_complete[0].shape[0]
-    dataset_train_features_count = dataset_train_complete[0].shape[1]
+
+    dataset_train_features_dim = dataset_train_complete[0].shape[1]
+    dataset_train_targets_dim = dataset_train_complete[1].shape[1]
 
     teacher_model = Autoencoder(
-        input_dimensions=dataset_train_features_count + 1,
+        input_dimensions=dataset_train_features_dim + dataset_train_targets_dim,
         wide_hidden_dimensions=32,
         narrow_hidden_dimensions=12,
         latent_dimensions=8,
     )
 
     student_model = Decoder(
-        output_dimensions=dataset_train_features_count + 1,
+        output_dimensions=dataset_train_features_dim + dataset_train_targets_dim,
         wide_hidden_dimensions=32,
         narrow_hidden_dimensions=12,
         latent_dimensions=8,
@@ -327,7 +301,7 @@ def main(
 
     print("==============Baseline==============")
     _run_evaluator_model(
-        dataset_train, dataset_test, input_dimensions=dataset_train_features_count
+        dataset_train, dataset_test, input_dimensions=dataset_train_features_dim
     )
 
     print("==============Training teacher model==========")
@@ -343,7 +317,7 @@ def main(
         model=teacher_model,
         training_set_size=len(dataset_train),
         dataset_test=dataset_test,
-        input_dimensions=dataset_train_features_count,
+        input_dimensions=dataset_train_features_dim,
     )
 
     print("==============Training student model==========")
@@ -361,7 +335,7 @@ def main(
         model=student_model,
         training_set_size=len(dataset_train),
         dataset_test=dataset_test,
-        input_dimensions=dataset_train_features_count,
+        input_dimensions=dataset_train_features_dim,
     )
 
 

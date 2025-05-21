@@ -5,16 +5,6 @@ import torch
 from torch import nn
 
 
-class LossFunction(typing.Protocol):
-    def __call__(
-        self,
-        outs: torch.Tensor,
-        minibatch_data: torch.Tensor,
-        mean: torch.Tensor,
-        log_variance: torch.Tensor,
-    ) -> torch.Tensor: ...
-
-
 class Autoencoder(nn.Module):
     def __init__(
         self,
