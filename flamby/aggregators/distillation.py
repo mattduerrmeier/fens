@@ -15,8 +15,8 @@ from .common import AggregatorResult
 def run_and_evaluate(
     agg_params: typing.Mapping[str, typing.Any],
     test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
-    proxy_latents_tensor: torch.Tensor,
-    proxy_dataset_tensor: torch.Tensor,
+    aggregator_latents: torch.Tensor,
+    aggregator_train_dataset: torch.Tensor,
     num_labels: int,
     visualization_parameters: VisualizationParameters,
     device: torch.device,
@@ -24,21 +24,21 @@ def run_and_evaluate(
     logging.info("Teaching student model")
 
     if num_labels > 2:
-        x_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, :-num_labels]
-        y_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, -num_labels:]
+        x_proxy = aggregator_train_dataset.flatten(end_dim=1)[:, :-num_labels]
+        y_proxy = aggregator_train_dataset.flatten(end_dim=1)[:, -num_labels:]
     else:
-        x_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, :-1]
-        y_proxy = proxy_dataset_tensor.flatten(end_dim=1)[:, -1:]
+        x_proxy = aggregator_train_dataset.flatten(end_dim=1)[:, :-1]
+        y_proxy = aggregator_train_dataset.flatten(end_dim=1)[:, -1:]
 
-    proxy_dataset = torch.utils.data.TensorDataset(
-        proxy_latents_tensor.flatten(end_dim=1),
+    train_dataset = torch.utils.data.TensorDataset(
+        aggregator_latents.flatten(end_dim=1),
         x_proxy,
         y_proxy,
     )
 
     best_student_model = train_student(
         agg_params["model_config"],
-        proxy_dataset,
+        train_dataset,
         epochs=agg_params["distillation_epochs"],
         lr=agg_params["distillation_lr"],
         batch_size=64,

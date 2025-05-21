@@ -115,17 +115,21 @@ def evaluate_all_aggregations(
         "downstream_test_accuracy": -1,
     }
 
-    proxy_latents, proxy_dataset = sample_proxy_dataset_tensor(
+    aggregator_latents, aggregator_train_dataset = sample_proxy_dataset_tensor(
         models=models, samples=20_000, device=device
+    )
+
+    _, downstream_train_dataset = sample_proxy_dataset_tensor(
+        models=models, samples=10_000, device=device
     )
 
     print("Evaluating ensemble: mlp")
     results["neural_network"] = neural.run_and_evaluate(
         agg_params=trainable_agg_params,
-        train_loader=trainset,
+        aggregator_train_dataset=aggregator_train_dataset,
         test_loader=testset,
         downstream_test_loader=test_loader,
-        proxy_dataset_tensor=proxy_dataset,
+        downstream_train_tensor=downstream_train_dataset,
         num_labels=num_labels,
         device=device,
     )
@@ -134,8 +138,8 @@ def evaluate_all_aggregations(
     results["distillation"] = distillation.run_and_evaluate(
         agg_params=trainable_agg_params,
         test_loader=test_loader,
-        proxy_latents_tensor=proxy_latents,
-        proxy_dataset_tensor=proxy_dataset,
+        aggregator_latents=aggregator_latents,
+        aggregator_train_dataset=aggregator_train_dataset,
         num_labels=num_labels,
         visualization_parameters=visualization_parameters,
         device=device,

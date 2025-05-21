@@ -8,15 +8,32 @@ from .common import AggregatorResult
 
 def run_and_evaluate(
     agg_params: typing.Mapping[str, typing.Any],
-    train_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
+    aggregator_train_dataset: torch.Tensor,
     test_loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
     downstream_test_loader: torch.utils.data.DataLoader[
         tuple[torch.Tensor, torch.Tensor]
     ],
-    proxy_dataset_tensor: torch.Tensor,
+    downstream_train_tensor: torch.Tensor,
     num_labels: int,
     device: torch.device,
 ) -> AggregatorResult:
+    if num_labels > 2:
+        x_train = aggregator_train_dataset.flatten(end_dim=1)[:, :-num_labels]
+        y_train = aggregator_train_dataset.flatten(end_dim=1)[:, -num_labels:]
+    else:
+        x_train = aggregator_train_dataset.flatten(end_dim=1)[:, :-1]
+        y_train = aggregator_train_dataset.flatten(end_dim=1)[:, -1:]
+
+    train_dataset = torch.utils.data.TensorDataset(
+        x_train,
+        y_train,
+    )
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=32,
+    )
+
     mse_loss, best_model = nn_mapping(
         agg_params=agg_params,
         train_dataset=train_loader,
@@ -26,7 +43,7 @@ def run_and_evaluate(
     )
 
     train_accuracy, test_accuracy = evaluate_on_downstream_task(
-        best_model, proxy_dataset_tensor, downstream_test_loader, num_labels, device
+        best_model, downstream_train_dataset, downstream_test_loader, num_labels, device
     )
 
     return {
@@ -67,13 +84,13 @@ def nn_mapping(
 
 def evaluate_on_downstream_task(
     model: torch.nn.Module,
-    proxy_dataset: torch.Tensor,
+    aggregator_downstream_dataset: torch.Tensor,
     test_loader: torch.utils.data.DataLoader,
     num_labels: int,
     device: torch.device,
 ) -> tuple[float, float]:
-    proxy_dataset = proxy_dataset.swapaxes(0, 1)
-    downstream_dataset = model(proxy_dataset).detach()
+    aggregator_downstream_dataset = aggregator_downstream_dataset.swapaxes(0, 1)
+    downstream_dataset = model(aggregator_downstream_dataset).detach()
 
     synthetic_x: torch.Tensor
     synthetic_y: torch.Tensor

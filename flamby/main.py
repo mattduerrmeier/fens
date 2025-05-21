@@ -82,7 +82,7 @@ def get_parameters(dataset):
         BATCH_SIZE = 128
         LR = 1e-4
         NUM_EPOCHS_POOLED = 5
-        NUM_CLIENTS = 2
+        NUM_CLIENTS = 1
         Optimizer = torch.optim.Adam
         collate_fn = None
         Baseline = None
