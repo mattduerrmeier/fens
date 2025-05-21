@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import torch
 from aggs import evaluate_all_aggregations
+from autoencoder.sampling import convert_tensor_to_dataset, sample_proxy_dataset_tensor
 from autoencoder.model import Autoencoder, MseKldLoss
 from autoencoder.visualization import visualize_from_dataset, visualize_latent
 from mnist_dataset import MNISTDataset
@@ -120,14 +121,6 @@ def get_parameters(dataset):
     return params
 
 
-def _sample_proxy_dataset(model: Autoencoder, samples: int, device: torch.device):
-    latent = model.sample_latent(samples)
-    latent = latent.to(device)
-    synthetic_x, synthetic_y = model.sample_from_latent(latent)
-
-    return torch.utils.data.TensorDataset(synthetic_x.detach(), synthetic_y.detach())
-
-
 def run(args, device):
     if not os.path.exists(args.result_dir):
         os.makedirs(args.result_dir)
@@ -154,7 +147,9 @@ def run(args, device):
     num_classes = params["num_classes"]
 
     dataset = load_dataset(dataset_class)
-    label_distribution: list[int] = determine_label_distribution(dataset, num_classes)
+    label_distribution: list[int] = determine_label_distribution(dataset)
+    num_labels = len(label_distribution)
+
     logging.info(
         f"Training on dataset with overall label distribution of: {label_distribution}"
     )
@@ -192,9 +187,7 @@ def run(args, device):
             client_dataset, (1 - proxy_fraction, proxy_fraction)
         )
 
-        client_label_distribution = determine_label_distribution(
-            train_dataset, num_classes
-        )
+        client_label_distribution = determine_label_distribution(train_dataset)
         logging.info(
             f"VAE trains on {len(train_dataset)} records with label distribution {client_label_distribution}"
         )
@@ -245,7 +238,18 @@ def run(args, device):
             logging.info(f"==> Best Loss for VAE {client_idx + 1}: {best_loss:.4f}")
             model = best_model
 
-            model_proxy_dataset = _sample_proxy_dataset(model, 10_000, device)
+            _latents, model_proxy_dataset_tensor = sample_proxy_dataset_tensor(
+                [model], 10_000, device
+            )
+            model_proxy_dataset = convert_tensor_to_dataset(
+                model_proxy_dataset_tensor, num_labels
+            )
+
+            logging.info(
+                f"Generated {len(model_proxy_dataset)} samples from local model model "
+                "for training of downstream task "
+                f"with label distribution {determine_label_distribution(model_proxy_dataset)} "
+            )
 
             if visualization_parameters.supports_visualization:
                 logging.info("Visualizing samples from client model")
@@ -329,7 +333,6 @@ def run(args, device):
         "model_config": params["model_config"],
     }
 
-    num_labels = len(label_distribution)
     # also tests the downstream tasks with the different aggregation schemes
     agg_results = evaluate_all_aggregations(
         proxy_dataloader,

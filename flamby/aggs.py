@@ -1,9 +1,10 @@
 import torch
-from aggregators import common, distillation, neural
+from aggregators import distillation, neural
 from aggregators.average import averaging
 from aggregators.linear import linear_mapping
-from params.visualization import VisualizationParameters
 from aggregators.weighted_average import weighted_averaging
+from autoencoder.sampling import sample_proxy_dataset_tensor
+from params.visualization import VisualizationParameters
 
 import wandb
 
@@ -114,7 +115,7 @@ def evaluate_all_aggregations(
         "downstream_test_accuracy": -1,
     }
 
-    proxy_latents, proxy_dataset = common.sample_proxy_dataset(
+    proxy_latents, proxy_dataset = sample_proxy_dataset_tensor(
         models=models, samples=20_000, device=device
     )
 

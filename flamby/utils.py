@@ -119,28 +119,33 @@ def prepare_client_datasets(
 
 def determine_label_distribution(
     dataset: torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]],
-    num_classes: int,
-) -> typing.Sequence[int]:
+) -> list[int]:
     loader = torch.utils.data.DataLoader(dataset, batch_size=1024, shuffle=False)
 
-    labels: dict[tuple[typing.Any], int] = {}
+    label_counts: dict[int, int] = {}
     for _batch_features, batch_labels in loader:
-        if num_classes > 2:
+        assert len(batch_labels.shape) == 2
+        _num_batch_records, label_dim = batch_labels.shape
+
+        if label_dim > 1:
             batch_labels = batch_labels.argmax(dim=1)
 
         batch_unique_values, batch_counts = typing.cast(
             torch.Tensor, batch_labels
         ).unique(return_counts=True)
 
+        # initialize all buckets til the highest value to also cover unrepresented classes
+        for label in range(batch_unique_values.max().item() + 1):
+            if label not in label_counts:
+                label_counts[label] = 0
+
         for unique_value, count in zip(batch_unique_values, batch_counts):
-            try:
-                key = tuple(unique_value.tolist())
-            except TypeError:
-                key = unique_value.item()
+            key = unique_value.item()
 
-            labels[key] = labels.get(key, 0) + count.item()
+            assert key in label_counts, f"expect labels to go from 0 to num_labels - 1, got {key}"
+            label_counts[key] += count.item()
 
-    return list(labels.values())
+    return list(label_counts.values())
 
 
 def load_trainset_combined(

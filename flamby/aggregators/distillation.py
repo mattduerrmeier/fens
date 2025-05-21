@@ -1,13 +1,15 @@
 import logging
+import typing
 
 import torch
 from autoencoder import visualization
 from autoencoder.model import Decoder
+from autoencoder.sampling import convert_tensor_to_dataset, sample_proxy_dataset_tensor
 from params.visualization import VisualizationParameters
 from train import evaluate_downstream_task
-import typing
+from utils import determine_label_distribution
 
-from .common import AggregatorResult, sample_proxy_dataset
+from .common import AggregatorResult
 
 
 def run_and_evaluate(
@@ -44,15 +46,24 @@ def run_and_evaluate(
         device=device,
     )
 
-    _, downstream_proxy_data = sample_proxy_dataset(
+    _, downstream_task_dataset_tensor = sample_proxy_dataset_tensor(
         [best_student_model], 10_000, device
+    )
+    downstream_task_dataset = convert_tensor_to_dataset(
+        downstream_task_dataset_tensor, num_labels
+    )
+
+    logging.info(
+        f"Generated {len(downstream_task_dataset)} samples from student model "
+        "for training of downstream task "
+        f"with label distribution {determine_label_distribution(downstream_task_dataset)} "
     )
 
     if visualization_parameters.supports_visualization:
         logging.info("Visualizing samples from student model")
         visualization.visualize_from_dataset(
             visualization_parameters.results_path / "aggregator-samples.png",
-            _convert_downstream_data_to_dataset(downstream_proxy_data, num_labels),
+            downstream_task_dataset,
         )
 
         logging.info("Visualizing latent space of student model")
@@ -66,7 +77,7 @@ def run_and_evaluate(
 
     logging.info("Evaluating student model on downstream task")
     downstream_train_accuracy, downstream_test_accuracy = evaluate_on_downstream_task(
-        downstream_proxy_data, test_loader, num_labels, device
+        downstream_task_dataset, test_loader, num_labels, device
     )
 
     return {
@@ -141,38 +152,12 @@ def train_student(
     return student_model
 
 
-def _convert_downstream_data_to_dataset(
-    downstream_dataset: torch.Tensor, num_labels: int
-) -> torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]]:
-    downstream_dataset = downstream_dataset.flatten(end_dim=1)
-
-    synthetic_x: torch.Tensor
-    synthetic_y: torch.Tensor
-    if num_labels > 2:
-        synthetic_x = downstream_dataset[:, :-num_labels]
-        synthetic_y = (
-            downstream_dataset[:, -num_labels:]
-            .clip(0, 1)
-            .round()
-            .argmax(dim=1, keepdim=True)
-        )
-    else:
-        synthetic_x = downstream_dataset[:, :-1]
-        synthetic_y = downstream_dataset[:, -1].unsqueeze(dim=1).clip(0, 1).round()
-
-    return torch.utils.data.TensorDataset(synthetic_x, synthetic_y)
-
-
 def evaluate_on_downstream_task(
-    downstream_dataset_tensor: torch.Tensor,
+    downstream_dataset: torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor]],
     test_loader: torch.utils.data.DataLoader,
     num_labels: int,
     device: torch.device,
 ) -> tuple[float, float]:
-    downstream_dataset = _convert_downstream_data_to_dataset(
-        downstream_dataset_tensor, num_labels
-    )
-
     train_loader = torch.utils.data.DataLoader(
         downstream_dataset,
         batch_size=32,
