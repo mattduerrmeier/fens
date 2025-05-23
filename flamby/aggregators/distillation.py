@@ -127,7 +127,7 @@ def train_student(
         total_loss = 0
 
         for batch_latents, batch_features, batch_targets in torch.utils.data.DataLoader(
-            proxy_dataset, batch_size=batch_size
+            proxy_dataset, batch_size=batch_size, shuffle=True
         ):
             batch_latents = batch_latents.to(device)
             batch_features = batch_features.to(device)
