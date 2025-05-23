@@ -4,6 +4,7 @@ import typing
 import torch
 from autoencoder import visualization
 from autoencoder.model import Decoder
+from autoencoder.conditional_model import ConditionalDecoder
 from autoencoder.sampling import convert_tensor_to_dataset, sample_proxy_dataset_tensor
 from params.visualization import VisualizationParameters
 from train import evaluate_downstream_task
@@ -47,7 +48,7 @@ def run_and_evaluate(
     )
 
     _, downstream_task_dataset_tensor = sample_proxy_dataset_tensor(
-        [best_student_model], 10_000, device
+        [best_student_model], num_labels, 10_000, device
     )
     downstream_task_dataset = convert_tensor_to_dataset(
         downstream_task_dataset_tensor, num_labels
@@ -98,9 +99,8 @@ def train_student(
     num_labels: int,
     device: torch.device,
 ) -> torch.nn.Module:
-    # output_dim = input size + number of classes
-    output_dimensions = len(proxy_dataset[0][1]) + len(proxy_dataset[0][2])
-    student_model = Decoder(
+    output_dimensions = len(proxy_dataset[0][1])  # + len(proxy_dataset[0][2])
+    student_model = ConditionalDecoder(
         output_dimensions=output_dimensions,
         num_classes=num_labels,
         **model_config,
@@ -109,17 +109,7 @@ def train_student(
 
     batches = len(proxy_dataset) // batch_size
 
-    mse_loss = torch.nn.MSELoss(reduction="sum")
-
-    def adapted_loss(
-        actual_output: tuple[torch.Tensor, torch.Tensor],
-        expected_output: tuple[torch.Tensor, torch.Tensor],
-    ) -> torch.Tensor:
-        x_loss = mse_loss(actual_output[0], expected_output[0])
-        y_loss = mse_loss(actual_output[1], expected_output[1].float())
-        return x_loss + y_loss
-
-    loss_function = adapted_loss
+    loss_function = torch.nn.MSELoss(reduction="sum")
 
     student_model.train()
 
@@ -127,7 +117,7 @@ def train_student(
         total_loss = 0
 
         for batch_latents, batch_features, batch_targets in torch.utils.data.DataLoader(
-            proxy_dataset, batch_size=batch_size
+            proxy_dataset, batch_size=batch_size, shuffle=True
         ):
             batch_latents = batch_latents.to(device)
             batch_features = batch_features.to(device)
@@ -135,10 +125,8 @@ def train_student(
 
             optimizer.zero_grad()
 
-            teacher_output = (batch_features, batch_targets)
-            student_output = student_model.sample_from_latent(
-                batch_latents, requires_argmax=False
-            )
+            teacher_output = batch_features
+            student_output = student_model(batch_latents, batch_targets)
 
             loss = loss_function(student_output, teacher_output)
 

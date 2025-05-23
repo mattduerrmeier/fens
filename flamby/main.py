@@ -5,7 +5,8 @@ import pandas as pd
 import torch
 from aggs import evaluate_all_aggregations
 from autoencoder.sampling import convert_tensor_to_dataset, sample_proxy_dataset_tensor
-from autoencoder.model import Autoencoder, MseKldLoss
+from autoencoder.model import Autoencoder,  MseKldLoss
+from autoencoder.conditional_model import ConditionalAutoencoder, ConditionalDecoder, ConditionalMseKldLoss
 from autoencoder.visualization import visualize_from_dataset, visualize_latent
 from mnist_dataset import MNISTDataset
 from params.visualization import get_visualization_parameters
@@ -148,7 +149,6 @@ def run(args, device):
 
     dataset = load_dataset(dataset_class)
     label_distribution: list[int] = determine_label_distribution(dataset)
-    num_labels = len(label_distribution)
 
     logging.info(
         f"Training on dataset with overall label distribution of: {label_distribution}"
@@ -204,8 +204,8 @@ def run(args, device):
         torch.manual_seed(args.seed + client_idx)
 
         # encoder is trained on the data and labels
-        D_in = len(train_dataset[0][0]) + len(train_dataset[0][1])
-        model = Autoencoder(D_in, num_classes, **params["model_config"])
+        D_in = len(train_dataset[0][0]) # + len(train_dataset[0][1])
+        model = ConditionalAutoencoder(D_in, num_classes, **params["model_config"])
 
         if args.use_trained_models:
             logging.info(f"Loading trained model {client_idx}")
@@ -215,7 +215,7 @@ def run(args, device):
                 )
             )
         else:
-            loss_fn = MseKldLoss(num_classes, target_coeff=3)
+            loss_fn = ConditionalMseKldLoss()
             optimizer = params["optimizer"](model.parameters(), lr=params["lr"])
 
             # Constant learning rate scheduler
@@ -238,11 +238,16 @@ def run(args, device):
             logging.info(f"==> Best Loss for VAE {client_idx + 1}: {best_loss:.4f}")
             model = best_model
 
+            if client_idx == 0:
+                model_array = [model, None]
+            else:
+                model_array = [None, model]
+
             _latents, model_proxy_dataset_tensor = sample_proxy_dataset_tensor(
-                [model], 10_000, device
+                model_array, num_classes, 10_000, device
             )
             model_proxy_dataset = convert_tensor_to_dataset(
-                model_proxy_dataset_tensor, num_labels
+                model_proxy_dataset_tensor, num_classes
             )
 
             logging.info(
@@ -339,7 +344,7 @@ def run(args, device):
         test_dataloader,
         trained_models,
         labels_dists,
-        num_labels,
+        num_classes,
         mse_metric,
         device,
         trainable_agg_params,

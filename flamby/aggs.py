@@ -74,61 +74,63 @@ def evaluate_all_aggregations(
 
     results = {}
 
-    print("Evaluating ensemble: average")
-    avg_performance = averaging(
-        testset, metric, len(models), num_labels, require_argmax
-    )
-    results["avg"] = {
-        "mse_loss": avg_performance,
-        "downstream_train_accuracy": -1,
-        "downstream_test_accuracy": -1,
-    }
+    if False:
+        print("Evaluating ensemble: average")
+        avg_performance = averaging(
+            testset, metric, len(models), num_labels, require_argmax
+        )
+        results["avg"] = {
+            "mse_loss": avg_performance,
+            "downstream_train_accuracy": -1,
+            "downstream_test_accuracy": -1,
+        }
 
-    print("Evaluating ensemble: weighted average")
-    wavg_performance = weighted_averaging(
-        testset,
-        metric,
-        len(models),
-        num_labels,
-        label_dists,
-        require_argmax,
-    )
-    results["wavg"] = {
-        "mse_loss": wavg_performance,
-        "downstream_train_accuracy": -1,
-        "downstream_test_accuracy": -1,
-    }
+        print("Evaluating ensemble: weighted average")
+        wavg_performance = weighted_averaging(
+            testset,
+            metric,
+            len(models),
+            num_labels,
+            label_dists,
+            require_argmax,
+        )
+        results["wavg"] = {
+            "mse_loss": wavg_performance,
+            "downstream_train_accuracy": -1,
+            "downstream_test_accuracy": -1,
+        }
 
-    print("Evaluating ensemble: linear mapping")
-    lm_performance = linear_mapping(
-        testset,
-        metric,
-        len(models),
-        num_labels,
-        trainset,
-        trainable_agg_params,
-        require_argmax,
-    )
-    results["linear_mapping"] = {
-        "mse_loss": lm_performance,
-        "downstream_train_accuracy": -1,
-        "downstream_test_accuracy": -1,
-    }
+        print("Evaluating ensemble: linear mapping")
+        lm_performance = linear_mapping(
+            testset,
+            metric,
+            len(models),
+            num_labels,
+            trainset,
+            trainable_agg_params,
+            require_argmax,
+        )
+        results["linear_mapping"] = {
+            "mse_loss": lm_performance,
+            "downstream_train_accuracy": -1,
+            "downstream_test_accuracy": -1,
+        }
 
     proxy_latents, proxy_dataset = sample_proxy_dataset_tensor(
-        models=models, samples=20_000, device=device
+        models=models, num_labels=num_labels, samples=20_000, device=device
     )
 
-    print("Evaluating ensemble: mlp")
-    results["neural_network"] = neural.run_and_evaluate(
-        agg_params=trainable_agg_params,
-        train_loader=trainset,
-        test_loader=testset,
-        downstream_test_loader=test_loader,
-        proxy_dataset_tensor=proxy_dataset,
-        num_labels=num_labels,
-        device=device,
-    )
+    if False:
+        print("Evaluating ensemble: mlp")
+        results["neural_network"] = neural.run_and_evaluate(
+            agg_params=trainable_agg_params,
+            train_loader=trainset,
+            test_loader=testset,
+            downstream_test_loader=test_loader,
+            proxy_dataset_tensor=proxy_dataset,
+            num_labels=num_labels,
+            device=device,
+        )
 
     print("Evaluating ensemble: distillation")
     results["distillation"] = distillation.run_and_evaluate(

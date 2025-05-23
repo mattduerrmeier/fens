@@ -108,11 +108,20 @@ def prepare_client_datasets(
         dataset, lengths=(train_test_split, 1 - train_test_split), generator=generator
     )
 
-    client_datasets = torch.utils.data.random_split(
-        dataset_train,
-        lengths=tuple(1 / num_clients for _ in range(num_clients)),
-        generator=generator,
-    )
+    assert num_clients == 2, "hack only supports exactly two clients"
+
+    # Split dataset_train by label: client 0 gets labels 0-4, client 1 gets labels 5-9
+    label_to_client = {label: 0 if label < 5 else 1 for label in range(10)}
+    client_indices = [[] for _ in range(num_clients)]
+
+    for idx, (_, label) in enumerate(dataset_train):
+        label_idx = label.argmax().item()
+        client_idx = label_to_client[label_idx]
+        client_indices[client_idx].append(idx)
+
+    client_datasets = [
+        torch.utils.data.Subset(dataset_train, indices) for indices in client_indices
+    ]
 
     return PreparedDatasets(client_datasets=client_datasets, test_dataset=dataset_test)
 

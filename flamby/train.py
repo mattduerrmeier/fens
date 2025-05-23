@@ -141,9 +141,10 @@ def train_and_evaluate(
             # forward pass
             out, mu, logvar = model((data, target))
 
-            concatenated_input = torch.concat((data, target), dim=1)
+            # concatenated_input = torch.concat((data, target), dim=1)
             # need to extract the two term to be able to log both of them
-            mse_loss, kld_loss = loss_fn(out, concatenated_input, mu, logvar)
+
+            mse_loss, kld_loss = loss_fn(out, data, mu, logvar)
             loss = mse_loss + kld_loss
 
             # backward pass
@@ -209,8 +210,8 @@ def evaluate(model, loss_fn, test_loader, device):
             target = target.to(device)
             out, mu, logvar = model((data, target))
 
-            concatenated_input = torch.concat((data, target), dim=1)
-            mse_loss, kld_loss = loss_fn(out, concatenated_input, mu, logvar)
+            # concatenated_input = torch.concat((data, target), dim=1)
+            mse_loss, kld_loss = loss_fn(out, data, mu, logvar)
 
             loss = mse_loss + kld_loss
 
