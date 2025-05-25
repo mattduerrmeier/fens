@@ -23,13 +23,13 @@ pipenv install
 
 You can optionally use [wandb](https://wandb.ai/) for logging the local training and aggregation results.
 You need to create an account on wandb to use this feature.
-On the machine you run the experiments on, use the command to login to your account:
+Once you have account, use the following command to login on the machine you run the experiments one:
 
 ```bash
 wandb login
 ```
 
-You must also add these two parameters to the scripts to run with wandb,:
+You must also add these two parameters to the scripts in `scripts/flamby/` to run with wandb:
 
 ```bash
 # remove --disable_wandb
