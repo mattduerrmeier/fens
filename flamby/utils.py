@@ -135,7 +135,7 @@ def determine_label_distribution(
         ).unique(return_counts=True)
 
         # initialize all buckets til the highest value to also cover unrepresented classes
-        for label in range(batch_unique_values.max().item() + 1):
+        for label in range(batch_unique_values.max().int().item() + 1):
             if label not in label_counts:
                 label_counts[label] = 0
 

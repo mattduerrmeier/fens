@@ -36,13 +36,12 @@ def get_parameters(dataset):
 
         BATCH_SIZE = 32
         NUM_CLASSES = 2
-        NUM_CLIENTS = 3
         from models import SmallNN_FHD as SmallNN
 
         model_config = {
-            "wide_hidden_dimensions": 12,
+            "wide_hidden_dimensions": 11,
             "narrow_hidden_dimensions": 8,
-            "latent_dimensions": 6,
+            "latent_dimensions": 3,
         }
     elif dataset == "FedCamelyon16":
         from flamby.datasets.fed_camelyon16 import (
@@ -68,7 +67,6 @@ def get_parameters(dataset):
             BaselineLoss,
         )
         from fed_isic_dataset import FedIsicCustom as FedDataset
-        # from flamby.datasets.fed_isic2019 import FedIsic2019 as FedDataset
         from flamby.datasets.fed_isic2019 import Optimizer
 
         collate_fn = None
@@ -85,7 +83,7 @@ def get_parameters(dataset):
         BATCH_SIZE = 128
         LR = 1e-4
         NUM_EPOCHS_POOLED = 5
-        NUM_CLIENTS = 1
+        NUM_CLIENTS = 2
         Optimizer = torch.optim.Adam
         collate_fn = None
         Baseline = None
