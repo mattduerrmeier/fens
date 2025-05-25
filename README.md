@@ -23,13 +23,13 @@ pipenv install
 
 You can optionally use [wandb](https://wandb.ai/) for logging the local training and aggregation results.
 You need to create an account on wandb to use this feature.
-Once you have account, use the following command to login on the machine you run the experiments one:
+Once you have an account, use the following command to login:
 
 ```bash
 wandb login
 ```
 
-You must also add these two parameters to the scripts in `scripts/flamby/` to run with wandb:
+You must also add these two parameters to the scripts in `scripts/flamby/` to run with Wandb:
 
 ```bash
 # remove --disable_wandb
@@ -52,7 +52,7 @@ If you use `pipenv` to manage your dependencies, FLamby will be properly built w
 If you don't use pipenv, you can run the following commands to get FLamby properly set up.
 Since FLamby is not published as a PyPI package, you need to install it from source.
 
-```sh
+```bash
 cd flamby-repo
 pip install -e .[heart,isic2019] # list of the datasets you want to install
 ```
